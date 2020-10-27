@@ -13,13 +13,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "picnic.h"
+#include "banquet.h"
 
-typedef struct {
-  picnic_params_t params;
+typedef struct
+{
+  banquet_params_t params;
   uint32_t iter;
 } bench_options_t;
 
-bool parse_args(bench_options_t* options, int argc, char** argv);
+bool parse_args(bench_options_t *options, int argc, char **argv);
 
 #endif

@@ -1,6 +1,8 @@
 cmake_minimum_required (VERSION 3.12)
 project (banquet C CXX)
 
+set(CMAKE_CXX_STANDARD 17)
+
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Choose the type of build." FORCE)
 endif()
@@ -14,16 +16,16 @@ FIND_PACKAGE(GMP REQUIRED)
 add_subdirectory(keccak)
 
 set(BANQUET_SRCS
-  aes.c
-  banquet.c
-  banquet_instances.c
-  tree.c
-  utils.c
+  aes.cpp
+  banquet.cpp
+  banquet_instances.cpp
+  tree.cpp
+  utils.cpp
   )
 
 add_library(banquet_static STATIC ${BANQUET_SRCS})
 target_link_libraries(banquet_static PUBLIC ${NTL_LIB} keccak)
 
-add_library(bench_utils STATIC tools/bench_utils.c tools/bench_timing.c)
-add_executable(bench tools/bench.c)
-target_link_libraries(bench picnic bench_utils)
+#add_library(bench_utils STATIC tools/bench_utils.c tools/bench_timing.c)
+#add_executable(bench tools/bench.c)
+#target_link_libraries(bench picnic bench_utils)

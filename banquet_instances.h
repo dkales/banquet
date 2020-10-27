@@ -11,12 +11,11 @@
 #define BANQUET_INSTANCES_H
 
 #include "banquet.h"
-#include <stdint.h>
+#include <cstdint>
+#include <cstdlib>
 
-#define SALT_SIZE 32
-#define MAX_DIGEST_SIZE 64
-
-typedef struct banquet_instance_t {
+struct banquet_instance_t
+{
 
   uint32_t digest_size;     /* bytes */
   uint32_t seed_size;       /* bytes */
@@ -28,17 +27,8 @@ typedef struct banquet_instance_t {
   uint32_t view_size;   /* bytes */
 
   banquet_params_t params;
-
-} banquet_instance_t;
+};
 
 const banquet_instance_t *banquet_instance_get(banquet_params_t param);
-
-/* Prefix values for domain separation */
-static const uint8_t HASH_PREFIX_0 = 0;
-static const uint8_t HASH_PREFIX_1 = 1;
-static const uint8_t HASH_PREFIX_2 = 2;
-static const uint8_t HASH_PREFIX_3 = 3;
-static const uint8_t HASH_PREFIX_4 = 4;
-static const uint8_t HASH_PREFIX_5 = 5;
 
 #endif

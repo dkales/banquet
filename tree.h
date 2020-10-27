@@ -1,83 +1,51 @@
-/*! @file tree.h
- *  @brief This file has part of the tree implementation used to generate
- *  random seeds and commit to multiple values with a Merkle tree.
- *
- *  This file is part of the reference implementation of the Picnic signature scheme.
- *  See the accompanying documentation for complete details.
- *
- *  The code is provided under the MIT license, see LICENSE for
- *  more details.
- *  SPDX-License-Identifier: MIT
- */
+#pragma once
 
-#ifndef PICNIC3_TREE_H
-#define PICNIC3_TREE_H
+#include <array>
+#include <optional>
+#include <vector>
+#include <cstdint>
+#include <cstdlib>
 
-#include "picnic_instances.h"
+#include "banquet.h"
 
-/*
- * Represents a (nearly) complete binary tree, stored in memory as an array.
- * The root is at nodes[0], and the left child of node k is 2k + 1, the right
- * child is at 2k + 2
- */
-typedef struct tree_t {
-  size_t depth;      /* The depth of the tree */
-  uint8_t** nodes;   /* The data for each node */
-  size_t dataSize;   /* The size data at each node, in bytes */
-  uint8_t* haveNode; /* If we have the data (seed or hash) for node i, haveSeed[i] is 1 */
-  uint8_t* exists;   /* Since the tree is not always complete, nodes marked 0 don't exist */
-  size_t numNodes;   /* The total number of nodes in the tree */
-  size_t numLeaves;  /* The total number of leaves in the tree */
-} tree_t;
+constexpr size_t SEED_SIZE = 16;
+constexpr size_t DIGEST_SIZE = 32;
 
-/* The largest seed size is 256 bits, for the Picnic3-L5-FS parameter set. */
-#define MAX_SEED_SIZE_BYTES (32)
+class SeedTree
+{
+    typedef std::array<uint8_t, SEED_SIZE> seed_t;
+    typedef std::pair<std::vector<seed_t>, size_t> reveal_list_t;
 
-tree_t* createTree(size_t numLeaves, size_t dataSize);
-void freeTree(tree_t* tree);
-uint8_t** getLeaves(tree_t* tree);
-/* Get one leaf, leafIndex must be in [0, tree->numLeaves -1] */
-uint8_t* getLeaf(tree_t* tree, size_t leafIndex);
+private:
+    // data, layed out continously in memory root at [0], its two children at [1], [2], in general node at [n], children at [2*n + 1], [2*n + 2]
+    std::vector<std::optional<seed_t>> _data;
+    std::vector<bool> _node_exists;
+    size_t _num_leaves;
 
-/* Functions for trees used to derive seeds.
- *    Signer's usage:   generateSeeds -> revealSeeds -> freeTree
- *    Verifier's usage: createTree -> reconstructSeeds -> freeTree
- */
+    std::pair<seed_t, seed_t> expandSeed(const seed_t &seed, const banquet_salt_t &salt, const size_t rep_idx, const size_t node_idx);
 
-/* Returns the number of bytes written to output.  A safe number of bytes for
- * callers to allocate is numLeaves*params->seedSizeBytes, or call revealSeedsSize. */
-tree_t* generateSeeds(size_t nSeeds, uint8_t* rootSeed, uint8_t* salt, size_t repIndex,
-                      const picnic_instance_t* params);
-size_t revealSeeds(tree_t* tree, uint16_t* hideList, size_t hideListSize, uint8_t* output,
-                   size_t outputLen, const picnic_instance_t* params);
-size_t revealSeedsSize(size_t numNodes, uint16_t* hideList, size_t hideListSize,
-                       const picnic_instance_t* params);
-int reconstructSeeds(tree_t* tree, uint16_t* hideList, size_t hideListSize, uint8_t* input,
-                     size_t inputLen, uint8_t* salt, size_t repIndex,
-                     const picnic_instance_t* params);
+public:
+    // construct from given seed, expand into num_leaves small seeds
+    SeedTree(seed_t seed, size_t num_leaves, const banquet_salt_t &salt, const size_t rep_idx);
+    // re-construct from reveallist, expand all known values
+    SeedTree(reveal_list_t reveallist);
+    ~SeedTree();
 
-/* Functions for Merkle hash trees used for commitments.
- *
- * Signer call sequence:
- *     1. createTree
- *     2. buildMerkleTree  with all commitments as leaf nodes
- *     3. openMerkleTree   with missingLeaves - list of commitments the verifier won't recompute
- *     4. freeTree
- *  Verifier call sequence
- *      1. createTree
- *      2. addMerkleNodes       with the output of the signer
- *      3. verifyMerkleTree     Checks that all leaf nodes present are correct commitments
- *      4. freeTree
- */
-void buildMerkleTree(tree_t* tree, uint8_t** leafData, uint8_t* salt,
-                     const picnic_instance_t* params);
-uint8_t* openMerkleTree(tree_t* tree, uint16_t* missingLeaves, size_t missingLeavesSize,
-                        size_t* outputSizeBytes);
-size_t openMerkleTreeSize(size_t numNodes, uint16_t* notMissingLeaves, size_t notMissingLeavesSize,
-                          const picnic_instance_t* params);
-int addMerkleNodes(tree_t* tree, uint16_t* missingLeaves, size_t missingLeavesSize, uint8_t* input,
-                   size_t inputSize);
-int verifyMerkleTree(tree_t* tree, uint8_t** leafData, uint8_t* salt,
-                     const picnic_instance_t* params);
+    reveal_list_t reveal_all_but(size_t leaf_idx);
+    std::optional<seed_t> get_leaf(size_t leaf_idx);
+};
 
-#endif
+class MerkleTree
+{
+private:
+    /* data */
+public:
+    typedef std::array<uint8_t, DIGEST_SIZE> Digest;
+
+    // build a merkle tree from a list of digests
+    MerkleTree(const std::vector<MerkleTree::Digest> &digests);
+    ~MerkleTree();
+
+    //get root digest
+    Digest get_root();
+};
