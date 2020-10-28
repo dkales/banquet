@@ -1,9 +1,5 @@
 #include "aes.h"
-
-bool aes_128(const aes_block_t &key_in, const aes_block_t &plaintext_in,
-             aes_block_t &ciphertext_out) {
-  return aes_128_old(key_in.data(), plaintext_in.data(), ciphertext_out.data());
-}
+#include <cassert>
 
 static unsigned char multiply(unsigned int a, unsigned int b) {
   unsigned char result = 0;
@@ -82,9 +78,39 @@ static unsigned char bytesub(unsigned char c) {
   // printf("%u->%u\n", c, result);
   return result;
 }
+static unsigned char bytesub_save(unsigned char c,
+                                  std::pair<uint8_t, uint8_t> &save) {
+  unsigned char c3 = multiply(square(c), c);
+  unsigned char c7 = multiply(square(c3), c);
+  unsigned char c63 = multiply(square(square(square(c7))), c7);
+  unsigned char c127 = multiply(square(c63), c);
+  unsigned char c254 = square(c127);
+  unsigned char f[8];
+  unsigned char h[8];
+  unsigned char result = c254;
+  save.first = c;
+  save.second = result;
+  int i;
 
-bool aes_128_old(const uint8_t *key, const uint8_t *plaintext,
-                 uint8_t *ciphertext) {
+  for (i = 0; i < 8; ++i)
+    f[i] = 1 & (c254 >> i);
+  h[0] = f[0] ^ f[4] ^ f[5] ^ f[6] ^ f[7] ^ 1;
+  h[1] = f[1] ^ f[5] ^ f[6] ^ f[7] ^ f[0] ^ 1;
+  h[2] = f[2] ^ f[6] ^ f[7] ^ f[0] ^ f[1];
+  h[3] = f[3] ^ f[7] ^ f[0] ^ f[1] ^ f[2];
+  h[4] = f[4] ^ f[0] ^ f[1] ^ f[2] ^ f[3];
+  h[5] = f[5] ^ f[1] ^ f[2] ^ f[3] ^ f[4] ^ 1;
+  h[6] = f[6] ^ f[2] ^ f[3] ^ f[4] ^ f[5] ^ 1;
+  h[7] = f[7] ^ f[3] ^ f[4] ^ f[5] ^ f[6];
+  result = 0;
+  for (i = 0; i < 8; ++i)
+    result |= h[i] << i;
+  // printf("%u->%u\n", c, result);
+  return result;
+}
+
+static bool aes_128_old(const uint8_t *key, const uint8_t *plaintext,
+                        uint8_t *ciphertext) {
   unsigned char expanded[4][44];
   unsigned char state[4][4];
   unsigned char newstate[4][4];
@@ -105,9 +131,10 @@ bool aes_128_old(const uint8_t *key, const uint8_t *plaintext,
         temp[i] = expanded[i][j - 1];
     else {
       for (i = 0; i < 4; ++i) {
-        if (expanded[(i + 1) % 4][j - 1] == 0)
+        unsigned char s = expanded[(i + 1) % 4][j - 1];
+        if (s == 0)
           return false;
-        temp[i] = bytesub(expanded[(i + 1) % 4][j - 1]);
+        temp[i] = bytesub(s);
       }
       temp[0] ^= roundconstant;
       roundconstant = xtime(roundconstant);
@@ -151,4 +178,96 @@ bool aes_128_old(const uint8_t *key, const uint8_t *plaintext,
       ciphertext[j * 4 + i] = state[i][j];
 
   return true;
+}
+
+static bool aes_128_save_sbox_state(
+    const uint8_t *key, const uint8_t *plaintext, uint8_t *ciphertext,
+    std::vector<std::pair<uint8_t, uint8_t>> &saved_sbox_state) {
+  unsigned char expanded[4][44];
+  unsigned char state[4][4];
+  unsigned char newstate[4][4];
+  unsigned char roundconstant;
+  int i;
+  int j;
+  int r;
+
+  for (j = 0; j < 4; ++j)
+    for (i = 0; i < 4; ++i)
+      expanded[i][j] = key[j * 4 + i];
+
+  roundconstant = 1;
+  for (j = 4; j < 44; ++j) {
+    unsigned char temp[4];
+    if (j % 4)
+      for (i = 0; i < 4; ++i)
+        temp[i] = expanded[i][j - 1];
+    else {
+      for (i = 0; i < 4; ++i) {
+        unsigned char s = expanded[(i + 1) % 4][j - 1];
+        if (s == 0)
+          return false;
+        std::pair<uint8_t, uint8_t> sbox_state;
+        temp[i] = bytesub_save(s, sbox_state);
+        saved_sbox_state.push_back(sbox_state);
+      }
+      temp[0] ^= roundconstant;
+      roundconstant = xtime(roundconstant);
+    }
+    for (i = 0; i < 4; ++i)
+      expanded[i][j] = temp[i] ^ expanded[i][j - 4];
+  }
+
+  for (j = 0; j < 4; ++j)
+    for (i = 0; i < 4; ++i)
+      state[i][j] = plaintext[j * 4 + i] ^ expanded[i][j];
+
+  for (r = 0; r < 10; ++r) {
+    for (i = 0; i < 4; ++i)
+      for (j = 0; j < 4; ++j) {
+        if (state[i][j] == 0)
+          return false;
+        std::pair<uint8_t, uint8_t> sbox_state;
+        newstate[i][j] = bytesub_save(state[i][j], sbox_state);
+        saved_sbox_state.push_back(sbox_state);
+      }
+    for (i = 0; i < 4; ++i)
+      for (j = 0; j < 4; ++j)
+        state[i][j] = newstate[i][(j + i) % 4];
+    if (r < 9)
+      for (j = 0; j < 4; ++j) {
+        unsigned char a0 = state[0][j];
+        unsigned char a1 = state[1][j];
+        unsigned char a2 = state[2][j];
+        unsigned char a3 = state[3][j];
+        state[0][j] = xtime(a0 ^ a1) ^ a1 ^ a2 ^ a3;
+        state[1][j] = xtime(a1 ^ a2) ^ a2 ^ a3 ^ a0;
+        state[2][j] = xtime(a2 ^ a3) ^ a3 ^ a0 ^ a1;
+        state[3][j] = xtime(a3 ^ a0) ^ a0 ^ a1 ^ a2;
+      }
+    for (i = 0; i < 4; ++i)
+      for (j = 0; j < 4; ++j)
+        state[i][j] ^= expanded[i][r * 4 + 4 + j];
+  }
+
+  for (j = 0; j < 4; ++j)
+    for (i = 0; i < 4; ++i)
+      ciphertext[j * 4 + i] = state[i][j];
+
+  return true;
+}
+
+bool aes_128(const aes_block_t &key_in, const aes_block_t &plaintext_in,
+             aes_block_t &ciphertext_out) {
+  return aes_128_old(key_in.data(), plaintext_in.data(), ciphertext_out.data());
+}
+
+std::vector<std::pair<uint8_t, uint8_t>>
+aes_128_with_sbox_output(const aes_block_t &key_in,
+                         const aes_block_t &plaintext_in,
+                         aes_block_t &ciphertext_out) {
+  std::vector<std::pair<uint8_t, uint8_t>> result;
+  result.reserve(NUM_SBOXES_AES_128);
+  assert(aes_128_save_sbox_state(key_in.data(), plaintext_in.data(),
+                                 ciphertext_out.data(), result));
+  return result;
 }

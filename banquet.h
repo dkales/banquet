@@ -1,12 +1,13 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <cstdlib>
-#include <array>
+
+#include "banquet_instances.h"
 
 /** Parameter set names */
-enum banquet_params_t
-{
+enum banquet_params_t {
   PARAMETER_SET_INVALID = 0,
   Banquet_L1_Param1 = 1,
   PARAMETER_SET_MAX_INDEX = 2
@@ -31,3 +32,8 @@ typedef std::array<uint8_t, BANQUET_PUBLICKEY_SIZE> banquet_publickey_t;
 
 /** Private key */
 typedef std::array<uint8_t, BANQUET_PRIVATEKEY_SIZE> banquet_privatekey_t;
+
+typedef std::pair<banquet_privatekey_t, banquet_publickey_t> banquet_keypair_t;
+
+// crypto api
+banquet_keypair_t generate_banquet_key(banquet_instance_t instance);
