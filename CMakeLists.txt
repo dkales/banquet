@@ -34,10 +34,13 @@ target_link_libraries(banquet_static PUBLIC ${NTL_LIB} keccak)
 
 if(BUILD_TESTS)
 find_package(Catch2 REQUIRED)
+add_executable(aes_test tests/aes_test.cpp)
 add_executable(tree_test tests/tree_test.cpp)
+target_link_libraries(aes_test Catch2::Catch2 banquet_static)
 target_link_libraries(tree_test Catch2::Catch2 banquet_static)
 
 include(CTest)
 include(Catch)
 catch_discover_tests(tree_test)
+catch_discover_tests(aes_test)
 endif()

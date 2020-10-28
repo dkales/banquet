@@ -1,16 +1,14 @@
 #include "aes.h"
 
-int aes_128(const aes_block_t key_in, const aes_block_t plaintext_in, aes_block_t &ciphertext_out)
-{
+bool aes_128(const aes_block_t &key_in, const aes_block_t &plaintext_in,
+             aes_block_t &ciphertext_out) {
   return aes_128_old(key_in.data(), plaintext_in.data(), ciphertext_out.data());
 }
 
-static unsigned char multiply(unsigned int a, unsigned int b)
-{
+static unsigned char multiply(unsigned int a, unsigned int b) {
   unsigned char result = 0;
 
-  for (int i = 0; i < 8; ++i)
-  {
+  for (int i = 0; i < 8; ++i) {
     uint8_t mask = -(b & 1);
     result ^= (a & mask);
     uint16_t mask2 = -((uint16_t)(a >> 7) & 1);
@@ -21,8 +19,7 @@ static unsigned char multiply(unsigned int a, unsigned int b)
   return result;
 }
 
-static unsigned char multiply2(unsigned int c, unsigned int d)
-{
+static unsigned char multiply2(unsigned int c, unsigned int d) {
   unsigned char f[8];
   unsigned char g[8];
   unsigned char h[15];
@@ -40,8 +37,7 @@ static unsigned char multiply2(unsigned int c, unsigned int d)
     for (j = 0; j < 8; ++j)
       h[i + j] ^= f[i] & g[j];
 
-  for (i = 6; i >= 0; --i)
-  {
+  for (i = 6; i >= 0; --i) {
     h[i + 0] ^= h[i + 8];
     h[i + 1] ^= h[i + 8];
     h[i + 3] ^= h[i + 8];
@@ -55,18 +51,11 @@ static unsigned char multiply2(unsigned int c, unsigned int d)
   return result;
 }
 
-static unsigned char square(unsigned char c)
-{
-  return multiply(c, c);
-}
+static unsigned char square(unsigned char c) { return multiply(c, c); }
 
-static unsigned char xtime(unsigned char c)
-{
-  return multiply(c, 2);
-}
+static unsigned char xtime(unsigned char c) { return multiply(c, 2); }
 
-static unsigned char bytesub(unsigned char c)
-{
+static unsigned char bytesub(unsigned char c) {
   unsigned char c3 = multiply(square(c), c);
   unsigned char c7 = multiply(square(c3), c);
   unsigned char c63 = multiply(square(square(square(c7))), c7);
@@ -90,12 +79,12 @@ static unsigned char bytesub(unsigned char c)
   result = 0;
   for (i = 0; i < 8; ++i)
     result |= h[i] << i;
-  //printf("%u->%u\n", c, result);
+  // printf("%u->%u\n", c, result);
   return result;
 }
 
-int aes_128_old(const uint8_t *key, const uint8_t *plaintext, uint8_t *ciphertext)
-{
+bool aes_128_old(const uint8_t *key, const uint8_t *plaintext,
+                 uint8_t *ciphertext) {
   unsigned char expanded[4][44];
   unsigned char state[4][4];
   unsigned char newstate[4][4];
@@ -109,18 +98,15 @@ int aes_128_old(const uint8_t *key, const uint8_t *plaintext, uint8_t *ciphertex
       expanded[i][j] = key[j * 4 + i];
 
   roundconstant = 1;
-  for (j = 4; j < 44; ++j)
-  {
+  for (j = 4; j < 44; ++j) {
     unsigned char temp[4];
     if (j % 4)
       for (i = 0; i < 4; ++i)
         temp[i] = expanded[i][j - 1];
-    else
-    {
-      for (i = 0; i < 4; ++i)
-      {
+    else {
+      for (i = 0; i < 4; ++i) {
         if (expanded[(i + 1) % 4][j - 1] == 0)
-          return 1;
+          return false;
         temp[i] = bytesub(expanded[(i + 1) % 4][j - 1]);
       }
       temp[0] ^= roundconstant;
@@ -134,21 +120,18 @@ int aes_128_old(const uint8_t *key, const uint8_t *plaintext, uint8_t *ciphertex
     for (i = 0; i < 4; ++i)
       state[i][j] = plaintext[j * 4 + i] ^ expanded[i][j];
 
-  for (r = 0; r < 10; ++r)
-  {
+  for (r = 0; r < 10; ++r) {
     for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j)
-      {
+      for (j = 0; j < 4; ++j) {
         if (state[i][j] == 0)
-          return 1;
+          return false;
         newstate[i][j] = bytesub(state[i][j]);
       }
     for (i = 0; i < 4; ++i)
       for (j = 0; j < 4; ++j)
         state[i][j] = newstate[i][(j + i) % 4];
     if (r < 9)
-      for (j = 0; j < 4; ++j)
-      {
+      for (j = 0; j < 4; ++j) {
         unsigned char a0 = state[0][j];
         unsigned char a1 = state[1][j];
         unsigned char a2 = state[2][j];
@@ -167,5 +150,5 @@ int aes_128_old(const uint8_t *key, const uint8_t *plaintext, uint8_t *ciphertex
     for (i = 0; i < 4; ++i)
       ciphertext[j * 4 + i] = state[i][j];
 
-  return 0;
+  return true;
 }
