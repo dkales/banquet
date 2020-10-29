@@ -12,6 +12,7 @@ constexpr size_t SEED_SIZE = 16;
 constexpr size_t DIGEST_SIZE = 32;
 
 typedef std::array<uint8_t, SEED_SIZE> seed_t;
+typedef std::array<uint8_t, DIGEST_SIZE> digest_t;
 
 class SeedTree {
 public:

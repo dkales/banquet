@@ -32,6 +32,49 @@ generate_salt_and_seeds(const banquet_instance_t &instance,
   return std::make_pair(salt, seeds);
 }
 
+static digest_t commit_to_party_seed(const seed_t &seed,
+                                     const banquet_salt_t &salt, size_t rep_idx,
+                                     size_t party_idx) {
+  hash_context ctx;
+  hash_init(&ctx, DIGEST_SIZE);
+  hash_update(&ctx, salt.data(), salt.size());
+  hash_update_uint16_le(&ctx, (uint16_t)rep_idx);
+  hash_update_uint16_le(&ctx, (uint16_t)party_idx);
+  hash_update(&ctx, seed.data(), seed.size());
+  hash_final(&ctx);
+
+  digest_t commitment;
+  hash_squeeze(&ctx, commitment.data(), commitment.size());
+  return commitment;
+}
+static digest_t
+phase_1_commitment(const banquet_instance_t &instance,
+                   const banquet_salt_t &salt,
+                   const std::vector<std::vector<digest_t>> &commitments,
+                   const std::vector<aes_block_t> &key_deltas,
+                   const std::vector<std::vector<uint8_t>> &t_deltas) {
+
+  hash_context ctx;
+  hash_init(&ctx, DIGEST_SIZE);
+  hash_update(&ctx, salt.data(), salt.size());
+
+  for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      hash_update(&ctx, commitments[repetition][party].data(),
+                  commitments[repetition][party].size());
+      hash_update(&ctx, key_deltas[repetition].data(),
+                  key_deltas[repetition].size());
+      hash_update(&ctx, t_deltas[repetition].data(),
+                  t_deltas[repetition].size());
+    }
+  }
+  hash_final(&ctx);
+
+  digest_t commitment;
+  hash_squeeze(&ctx, commitment.data(), commitment.size());
+  return commitment;
+}
+
 std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
                                   const banquet_keypair_t &keypair,
                                   uint8_t *message, size_t message_len) {
@@ -56,12 +99,22 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
   // create seed trees and random tapes
   std::vector<SeedTree> seed_trees;
   std::vector<std::vector<RandomTape>> random_tapes;
+  std::vector<std::vector<digest_t>> party_seed_commitments;
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     // generate seed tree for the N parties
     seed_t &repetition_seed = master_seeds[repetition];
     seed_trees.emplace_back(repetition_seed, instance.num_MPC_parties, salt,
                             repetition);
+
+    // commit to each party's seed;
+    std::vector<digest_t> current_party_seed_commitments;
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      current_party_seed_commitments.push_back(
+          commit_to_party_seed(seed_trees[repetition].get_leaf(party).value(),
+                               salt, repetition, party));
+    }
+    party_seed_commitments.push_back(current_party_seed_commitments);
 
     // create random tape for each party
     std::vector<RandomTape> party_tapes;
@@ -75,7 +128,13 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
   /////////////////////////////////////////////////////////////////////////////
   // phase 1: commit to executions of AES
   /////////////////////////////////////////////////////////////////////////////
+  std::vector<std::vector<aes_block_t>> rep_shared_keys;
+  std::vector<aes_block_t> rep_key_deltas;
+  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_ts;
+  std::vector<std::vector<uint8_t>> rep_t_deltas;
+
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+
     // generate sharing of secret key
     std::vector<aes_block_t> shared_key(instance.num_MPC_parties);
     aes_block_t key_delta = key;
@@ -86,13 +145,34 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
                      std::begin(key_delta), std::begin(key_delta),
                      std::bit_xor<uint8_t>());
     }
+
+    // fix first share
+    std::transform(std::begin(key_delta), std::end(key_delta),
+                   std::begin(shared_key[0]), std::begin(shared_key[0]),
+                   std::bit_xor<uint8_t>());
+
+    rep_shared_keys.push_back(shared_key);
+    rep_key_deltas.push_back(key_delta);
     // generate sharing of t values
     std::vector<std::vector<uint8_t>> shared_ts(instance.num_MPC_parties);
-    std::vector<uint8_t> t_deltas(NUM_SBOXES_AES_128);
+    std::vector<uint8_t> t_deltas(NUM_SBOXES_AES_128); // todo: copy initial ts
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       shared_ts[party].resize(NUM_SBOXES_AES_128);
+      std::transform(std::begin(shared_ts[party]), std::end(shared_ts[party]),
+                     std::begin(t_deltas), std::begin(t_deltas),
+                     std::bit_xor<uint8_t>());
     }
+    // fix first share
+    std::transform(std::begin(t_deltas), std::end(t_deltas),
+                   std::begin(shared_ts[0]), std::begin(shared_ts[0]),
+                   std::bit_xor<uint8_t>());
+    rep_shared_ts.push_back(shared_ts);
+    rep_t_deltas.push_back(t_deltas);
   }
+  // commit to salt, (all commitments of parties seeds, key_delta, t_delta) for
+  // all repetitions
+  digest_t sigma_1 = phase_1_commitment(instance, salt, party_seed_commitments,
+                                        rep_key_deltas, rep_t_deltas);
 
   /////////////////////////////////////////////////////////////////////////////
   // phase 2: challenge the multiplications
