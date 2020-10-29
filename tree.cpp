@@ -11,7 +11,7 @@ static size_t get_parent(size_t node) {
   return ((node + 1) >> 1) - 1;
 }
 
-SeedTree::SeedTree(SeedTree::seed_t seed, const size_t num_leaves,
+SeedTree::SeedTree(seed_t seed, const size_t num_leaves,
                    const banquet_salt_t &salt, const size_t rep_idx)
     : _data(), _node_exists(), _num_leaves(num_leaves) {
   size_t tree_depth = 1 + ceil_log2(num_leaves);
@@ -48,9 +48,10 @@ SeedTree::SeedTree(SeedTree::seed_t seed, const size_t num_leaves,
   }
 }
 
-std::pair<SeedTree::seed_t, SeedTree::seed_t>
-SeedTree::expandSeed(const SeedTree::seed_t &seed, const banquet_salt_t &salt,
-                     const size_t rep_idx, const size_t node_idx) {
+std::pair<seed_t, seed_t> SeedTree::expandSeed(const seed_t &seed,
+                                               const banquet_salt_t &salt,
+                                               const size_t rep_idx,
+                                               const size_t node_idx) {
   hash_context ctx;
   std::array<uint8_t, SEED_SIZE> ret1;
   std::array<uint8_t, SEED_SIZE> ret2;
@@ -190,7 +191,7 @@ SeedTree::reveal_list_t SeedTree::reveal_all_but(size_t leaf_idx) {
   return std::make_pair(path, leaf_idx);
 }
 
-std::optional<SeedTree::seed_t> SeedTree::get_leaf(size_t leaf_idx) {
+std::optional<seed_t> SeedTree::get_leaf(size_t leaf_idx) {
   assert(leaf_idx < _num_leaves);
   size_t real_leaf_idx = _num_total_nodes - _num_leaves + leaf_idx;
   return _data[real_leaf_idx];

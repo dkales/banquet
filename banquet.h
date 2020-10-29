@@ -3,15 +3,9 @@
 #include <array>
 #include <cstdint>
 #include <cstdlib>
+#include <vector>
 
 #include "banquet_instances.h"
-
-/** Parameter set names */
-enum banquet_params_t {
-  PARAMETER_SET_INVALID = 0,
-  Banquet_L1_Param1 = 1,
-  PARAMETER_SET_MAX_INDEX = 2
-};
 
 /* Prefix values for domain separation */
 constexpr uint8_t HASH_PREFIX_0 = 0;
@@ -36,4 +30,8 @@ typedef std::array<uint8_t, BANQUET_PRIVATEKEY_SIZE> banquet_privatekey_t;
 typedef std::pair<banquet_privatekey_t, banquet_publickey_t> banquet_keypair_t;
 
 // crypto api
-banquet_keypair_t generate_banquet_key(banquet_instance_t instance);
+banquet_keypair_t banquet_keygen(const banquet_instance_t &instance);
+
+std::vector<uint8_t> sign_message(const banquet_instance_t &instance,
+                                  const banquet_keypair_t &keypair,
+                                  uint8_t *message, size_t message_len);

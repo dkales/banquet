@@ -10,12 +10,17 @@
 #ifndef BANQUET_INSTANCES_H
 #define BANQUET_INSTANCES_H
 
-#include "banquet.h"
 #include <cstdint>
 #include <cstdlib>
 
-struct banquet_instance_t
-{
+/** Parameter set names */
+enum banquet_params_t {
+  PARAMETER_SET_INVALID = 0,
+  Banquet_L1_Param1 = 1,
+  PARAMETER_SET_MAX_INDEX = 2
+};
+
+struct banquet_instance_t {
 
   uint32_t digest_size;     /* bytes */
   uint32_t seed_size;       /* bytes */
