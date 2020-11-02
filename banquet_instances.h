@@ -31,6 +31,11 @@ struct banquet_instance_t {
   uint32_t output_size; /* bytes */
   uint32_t view_size;   /* bytes */
 
+  // m1 * m2 = m (NUM_AES_SBOXES)
+  uint32_t m1;     // m1: dimension 1 of sqrt check
+  uint32_t m2;     // m2: dimension 2 of sqrt check
+  uint32_t lambda; // field expansion factor
+
   banquet_params_t params;
 };
 

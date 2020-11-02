@@ -74,11 +74,42 @@ phase_1_commitment(const banquet_instance_t &instance,
   hash_squeeze(&ctx, commitment.data(), commitment.size());
   return commitment;
 }
+static digest_t phase_1_challenge(const banquet_instance_t &instance,
+                                  const banquet_salt_t &salt,
+                                  const digest_t &sigma_1) {
+  hash_context ctx;
+  hash_init(&ctx, DIGEST_SIZE);
+  hash_update(&ctx, salt.data(), salt.size());
+  hash_update(&ctx, sigma_1.data(), sigma_1.size());
+  hash_final(&ctx);
+
+  digest_t commitment;
+  hash_squeeze(&ctx, commitment.data(), commitment.size());
+  return commitment;
+}
+static std::vector<std::vector<std::vector<uint8_t>>>
+phase_1_expand(const banquet_instance_t &instance, const digest_t &h_1) {
+  hash_context ctx;
+  hash_init(&ctx, DIGEST_SIZE);
+  hash_update(&ctx, h_1.data(), h_1.size());
+  hash_final(&ctx);
+
+  std::vector<std::vector<std::vector<uint8_t>>> r_ejs;
+  for (size_t e = 0; e < instance.num_rounds; e++) {
+    std::vector<std::vector<uint8_t>> r_js;
+    for (size_t j = 0; j < instance.m1; j++) {
+      std::vector<uint8_t> r(instance.lambda);
+      hash_squeeze(&ctx, r.data(), r.size());
+      r_js.push_back(r);
+    }
+    r_ejs.push_back(r_js);
+  }
+  return r_ejs;
+}
 
 std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
                                   const banquet_keypair_t &keypair,
                                   uint8_t *message, size_t message_len) {
-
   // grab aes key, pt and ct
   aes_block_t key = keypair.first;
   aes_block_t pt, ct, ct2;
@@ -178,9 +209,33 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
   // phase 2: challenge the multiplications
   /////////////////////////////////////////////////////////////////////////////
 
+  // challenge hash
+  digest_t h_1 = phase_1_challenge(instance, salt, sigma_1);
+  // expand challenge hash to M * m1 values
+  std::vector<std::vector<std::vector<uint8_t>>> r_ejs =
+      phase_1_expand(instance, h_1);
+
   /////////////////////////////////////////////////////////////////////////////
   // phase 3: commit to the checking polynomials
   /////////////////////////////////////////////////////////////////////////////
+
+  for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      // lift shares from F_{2^8} to F_{2^{8\lambda}}
+
+      for (size_t j = 0; j < instance.m1; j++) {
+        // rearrange shares
+
+        // sample additional random points
+        std::vector<uint8_t> s_ej_bar(instance.lambda);
+        random_tapes[repetition][party].squeeze_bytes(s_ej_bar.data(),
+                                                      s_ej_bar.size());
+        std::vector<uint8_t> t_ej_bar(instance.lambda);
+        random_tapes[repetition][party].squeeze_bytes(t_ej_bar.data(),
+                                                      t_ej_bar.size());
+      }
+    }
+  }
 
   /////////////////////////////////////////////////////////////////////////////
   // phase 4: challenge the checking polynomials
