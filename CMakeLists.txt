@@ -15,6 +15,8 @@ set(BUILD_TESTS ON CACHE BOOL "Build unit tests.")
 SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 FIND_PACKAGE(NTL REQUIRED)
 FIND_PACKAGE(GMP REQUIRED)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
 
 add_subdirectory(keccak)
 
@@ -25,10 +27,11 @@ set(BANQUET_SRCS
   tree.cpp
   tape.cpp
   utils.cpp
+  randomness.c
   )
 
 add_library(banquet_static STATIC ${BANQUET_SRCS})
-target_link_libraries(banquet_static PUBLIC ${NTL_LIB} keccak)
+target_link_libraries(banquet_static PUBLIC keccak ${NTL_LIBRARY} ${GMP_LIBRARIES} Threads::Threads)
 
 #add_library(bench_utils STATIC tools/bench_utils.c tools/bench_timing.c)
 #add_executable(bench tools/bench.c)

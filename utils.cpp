@@ -10,7 +10,7 @@ namespace utils {
 static GF2X modulus;
 static GF2X generator;
 
-void init_GF2E_modulus(const banquet_instance_t &instance) {
+void init_extension_field(const banquet_instance_t &instance) {
   switch (instance.lambda) {
   case 4: {
     // modulus = X^32 + X^22 + X^2 + X^1 + 1
@@ -65,7 +65,7 @@ vec_GF2E get_first_n_field_elements(size_t n) {
   result.SetLength(n);
   GF2X gen;
   SetX(gen);
-  for (size_t i = 0; i < n; n++) {
+  for (size_t i = 0; i < n; i++) {
     result[i] = conv<GF2E>(gen);
     gen = MulByX(gen);
   }

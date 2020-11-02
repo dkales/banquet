@@ -1,7 +1,6 @@
 #include "banquet.h"
 
 #include "aes.h"
-#include "kdf_shake.h"
 #include "tape.h"
 #include "tree.h"
 #include "utils.h"
@@ -9,9 +8,29 @@
 #include <cassert>
 #include <cstring>
 
+extern "C" {
+#include "kdf_shake.h"
+#include "randomness.h"
+}
+
 #include <NTL/GF2EX.h>
 
-banquet_keypair_t banquet_keygen(const banquet_instance_t &instance) {}
+banquet_keypair_t banquet_keygen(const banquet_instance_t &instance) {
+  aes_block_t key, pt, ct;
+
+  while (true) {
+    rand_bytes(key.data(), key.size());
+    rand_bytes(pt.data(), pt.size());
+    if (aes_128(key, pt, ct)) {
+      break;
+    }
+  }
+  banquet_keypair_t keypair;
+  memcpy(keypair.first.data(), key.data(), key.size());
+  memcpy(keypair.second.data(), pt.data(), pt.size());
+  memcpy(keypair.second.data() + pt.size(), ct.data(), ct.size());
+  return keypair;
+}
 
 static void hash_update_GF2E(hash_context *ctx, const GF2E &element) {
   const GF2X &poly_rep = rep(element);
@@ -218,6 +237,9 @@ static std::vector<uint8_t> phase_3_expand(const banquet_instance_t &instance,
 banquet_signature_t banquet_sign(const banquet_instance_t &instance,
                                  const banquet_keypair_t &keypair,
                                  const uint8_t *message, size_t message_len) {
+  // init modulus of extension field F_{2^{8\lambda}}
+  utils::init_extension_field(instance);
+
   // grab aes key, pt and ct
   aes_block_t key = keypair.first;
   aes_block_t pt, ct, ct2;
@@ -325,9 +347,6 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   /////////////////////////////////////////////////////////////////////////////
   // phase 3: commit to the checking polynomials
   /////////////////////////////////////////////////////////////////////////////
-
-  // init modulus of extension field F_{2^{8\lambda}}
-  utils::init_extension_field(instance);
 
   // a vector of the first m2+1 field elements for interpolation
   vec_GF2E x_values_for_interpolation_zero_to_m2 =
