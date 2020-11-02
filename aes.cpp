@@ -271,3 +271,81 @@ aes_128_with_sbox_output(const aes_block_t &key_in,
                                  ciphertext_out.data(), result));
   return result;
 }
+
+// std::vector<std::vector<uint8_t>>
+// aes_128_s_shares(const std::vector<aes_block_t> &key_in,
+// const std::vector<std::vector<uint8_t>> &t_shares,
+// const aes_block_t &plaintext_in, aes_block_t &ciphertext_out) {
+
+// unsigned char expanded[4][44];
+// unsigned char state[4][4];
+// unsigned char newstate[4][4];
+// unsigned char roundconstant;
+// int i;
+// int j;
+// int r;
+
+// for (j = 0; j < 4; ++j)
+// for (i = 0; i < 4; ++i)
+// expanded[i][j] = key[j * 4 + i];
+
+// roundconstant = 1;
+// for (j = 4; j < 44; ++j) {
+// unsigned char temp[4];
+// if (j % 4)
+// for (i = 0; i < 4; ++i)
+// temp[i] = expanded[i][j - 1];
+// else {
+// for (i = 0; i < 4; ++i) {
+// unsigned char s = expanded[(i + 1) % 4][j - 1];
+// if (s == 0)
+// return false;
+// std::pair<uint8_t, uint8_t> sbox_state;
+// temp[i] = bytesub_save(s, sbox_state);
+// saved_sbox_state.push_back(sbox_state);
+//}
+// temp[0] ^= roundconstant;
+// roundconstant = xtime(roundconstant);
+//}
+// for (i = 0; i < 4; ++i)
+// expanded[i][j] = temp[i] ^ expanded[i][j - 4];
+//}
+
+// for (j = 0; j < 4; ++j)
+// for (i = 0; i < 4; ++i)
+// state[i][j] = plaintext[j * 4 + i] ^ expanded[i][j];
+
+// for (r = 0; r < 10; ++r) {
+// for (i = 0; i < 4; ++i)
+// for (j = 0; j < 4; ++j) {
+// if (state[i][j] == 0)
+// return false;
+// std::pair<uint8_t, uint8_t> sbox_state;
+// newstate[i][j] = bytesub_save(state[i][j], sbox_state);
+// saved_sbox_state.push_back(sbox_state);
+//}
+// for (i = 0; i < 4; ++i)
+// for (j = 0; j < 4; ++j)
+// state[i][j] = newstate[i][(j + i) % 4];
+// if (r < 9)
+// for (j = 0; j < 4; ++j) {
+// unsigned char a0 = state[0][j];
+// unsigned char a1 = state[1][j];
+// unsigned char a2 = state[2][j];
+// unsigned char a3 = state[3][j];
+// state[0][j] = xtime(a0 ^ a1) ^ a1 ^ a2 ^ a3;
+// state[1][j] = xtime(a1 ^ a2) ^ a2 ^ a3 ^ a0;
+// state[2][j] = xtime(a2 ^ a3) ^ a3 ^ a0 ^ a1;
+// state[3][j] = xtime(a3 ^ a0) ^ a0 ^ a1 ^ a2;
+//}
+// for (i = 0; i < 4; ++i)
+// for (j = 0; j < 4; ++j)
+// state[i][j] ^= expanded[i][r * 4 + 4 + j];
+//}
+
+// for (j = 0; j < 4; ++j)
+// for (i = 0; i < 4; ++i)
+// ciphertext[j * 4 + i] = state[i][j];
+
+// return true;
+//}

@@ -1,6 +1,6 @@
 /*
- *  This file is part of the optimized implementation of the Picnic signature scheme.
- *  See the accompanying documentation for complete details.
+ *  This file is part of the optimized implementation of the Picnic signature
+ * scheme. See the accompanying documentation for complete details.
  *
  *  The code is provided under the MIT license, see LICENSE for
  *  more details.
@@ -13,10 +13,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "banquet.h"
+#include "../banquet.h"
 
-typedef struct
-{
+typedef struct {
   banquet_params_t params;
   uint32_t iter;
 } bench_options_t;

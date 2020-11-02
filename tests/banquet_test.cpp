@@ -10,4 +10,8 @@ TEST_CASE("Sign and verify a message", "[banquet]") {
   banquet_signature_t signature = banquet_sign(
       instance, keypair, (const uint8_t *)message, strlen(message));
   REQUIRE(signature.proofs.size() == instance.num_rounds);
+  std::vector<uint8_t> serialized_signature =
+      banquet_serialize_signature(instance, signature);
+  std::cout << "signature length: " << serialized_signature.size()
+            << " bytes\n";
 }

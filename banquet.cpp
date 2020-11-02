@@ -15,32 +15,20 @@ extern "C" {
 
 #include <NTL/GF2EX.h>
 
-banquet_keypair_t banquet_keygen(const banquet_instance_t &instance) {
-  aes_block_t key, pt, ct;
-
-  while (true) {
-    rand_bytes(key.data(), key.size());
-    rand_bytes(pt.data(), pt.size());
-    if (aes_128(key, pt, ct)) {
-      break;
-    }
-  }
-  banquet_keypair_t keypair;
-  memcpy(keypair.first.data(), key.data(), key.size());
-  memcpy(keypair.second.data(), pt.data(), pt.size());
-  memcpy(keypair.second.data() + pt.size(), ct.data(), ct.size());
-  return keypair;
-}
-
-static void hash_update_GF2E(hash_context *ctx, const GF2E &element) {
+namespace {
+inline std::vector<uint8_t> GF2E_to_bytes(const GF2E &element) {
   const GF2X &poly_rep = rep(element);
   std::vector<uint8_t> buffer(NumBytes(poly_rep));
   BytesFromGF2X(buffer.data(), poly_rep, buffer.size());
+  return buffer;
+}
 
+inline void hash_update_GF2E(hash_context *ctx, const GF2E &element) {
+  std::vector<uint8_t> buffer = GF2E_to_bytes(element);
   hash_update(ctx, buffer.data(), buffer.size());
 }
 
-static std::pair<banquet_salt_t, std::vector<seed_t>>
+std::pair<banquet_salt_t, std::vector<seed_t>>
 generate_salt_and_seeds(const banquet_instance_t &instance,
                         const banquet_keypair_t &keypair,
                         const uint8_t *message, size_t message_len) {
@@ -62,9 +50,8 @@ generate_salt_and_seeds(const banquet_instance_t &instance,
   return std::make_pair(salt, seeds);
 }
 
-static digest_t commit_to_party_seed(const seed_t &seed,
-                                     const banquet_salt_t &salt, size_t rep_idx,
-                                     size_t party_idx) {
+digest_t commit_to_party_seed(const seed_t &seed, const banquet_salt_t &salt,
+                              size_t rep_idx, size_t party_idx) {
   hash_context ctx;
   hash_init(&ctx, DIGEST_SIZE);
   hash_update(&ctx, salt.data(), salt.size());
@@ -77,7 +64,8 @@ static digest_t commit_to_party_seed(const seed_t &seed,
   hash_squeeze(&ctx, commitment.data(), commitment.size());
   return commitment;
 }
-static digest_t
+
+digest_t
 phase_1_commitment(const banquet_instance_t &instance,
                    const banquet_salt_t &salt,
                    const std::vector<std::vector<digest_t>> &commitments,
@@ -105,7 +93,7 @@ phase_1_commitment(const banquet_instance_t &instance,
   return commitment;
 }
 
-static std::vector<std::vector<GF2E>>
+std::vector<std::vector<GF2E>>
 phase_1_expand(const banquet_instance_t &instance, const digest_t &h_1) {
   hash_context ctx;
   hash_init(&ctx, DIGEST_SIZE);
@@ -126,10 +114,10 @@ phase_1_expand(const banquet_instance_t &instance, const digest_t &h_1) {
   }
   return r_ejs;
 }
-static digest_t
-phase_2_commitment(const banquet_instance_t &instance,
-                   const banquet_salt_t &salt, const digest_t &h_1,
-                   const std::vector<std::vector<GF2E>> &P_deltas) {
+
+digest_t phase_2_commitment(const banquet_instance_t &instance,
+                            const banquet_salt_t &salt, const digest_t &h_1,
+                            const std::vector<std::vector<GF2E>> &P_deltas) {
 
   hash_context ctx;
   hash_init_prefix(&ctx, DIGEST_SIZE, HASH_PREFIX_2);
@@ -148,9 +136,9 @@ phase_2_commitment(const banquet_instance_t &instance,
   return commitment;
 }
 
-static std::vector<GF2E> phase_2_expand(const banquet_instance_t &instance,
-                                        const digest_t &h_2,
-                                        const vec_GF2E &forbidden_values) {
+std::vector<GF2E> phase_2_expand(const banquet_instance_t &instance,
+                                 const digest_t &h_2,
+                                 const vec_GF2E &forbidden_values) {
   hash_context ctx;
   hash_init(&ctx, DIGEST_SIZE);
   hash_update(&ctx, h_2.data(), h_2.size());
@@ -179,7 +167,7 @@ static std::vector<GF2E> phase_2_expand(const banquet_instance_t &instance,
   return R_es;
 }
 
-static digest_t phase_3_commitment(
+digest_t phase_3_commitment(
     const banquet_instance_t &instance, const banquet_salt_t &salt,
     const digest_t &h_2, const std::vector<GF2E> &c,
     const std::vector<std::vector<GF2E>> &c_shares,
@@ -214,8 +202,8 @@ static digest_t phase_3_commitment(
   return commitment;
 }
 
-static std::vector<uint8_t> phase_3_expand(const banquet_instance_t &instance,
-                                           const digest_t &h_3) {
+std::vector<uint8_t> phase_3_expand(const banquet_instance_t &instance,
+                                    const digest_t &h_3) {
   assert(instance.num_MPC_parties <= 256);
   // TODO assert(is_power_of_2(instance.num_MPC_parties));
   hash_context ctx;
@@ -232,6 +220,24 @@ static std::vector<uint8_t> phase_3_expand(const banquet_instance_t &instance,
     opened_parties.push_back(party);
   }
   return opened_parties;
+}
+} // namespace
+
+banquet_keypair_t banquet_keygen(const banquet_instance_t &instance) {
+  aes_block_t key, pt, ct;
+
+  while (true) {
+    rand_bytes(key.data(), key.size());
+    rand_bytes(pt.data(), pt.size());
+    if (aes_128(key, pt, ct)) {
+      break;
+    }
+  }
+  banquet_keypair_t keypair;
+  memcpy(keypair.first.data(), key.data(), key.size());
+  memcpy(keypair.second.data(), pt.data(), pt.size());
+  memcpy(keypair.second.data() + pt.size(), ct.data(), ct.size());
+  return keypair;
 }
 
 banquet_signature_t banquet_sign(const banquet_instance_t &instance,
@@ -329,6 +335,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
                    std::begin(shared_ts[0]), std::begin(shared_ts[0]),
                    std::bit_xor<uint8_t>());
     rep_shared_t.push_back(shared_ts);
+    rep_shared_s.push_back(shared_ts);
     rep_t_deltas.push_back(t_deltas);
   }
 
@@ -453,14 +460,14 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         P_shares[party][k] = utils::GF2E_from_bytes(P_k_share);
       }
     }
-    for (size_t k = instance.m2; k < 2 * instance.m2; k++) {
+    for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
       // calculate offset
       GF2E k_element = x_values_for_interpolation_zero_to_2m2[k];
       GF2E P_at_k_delta = eval(P, k_element);
       for (size_t party = 0; party < instance.num_MPC_parties; party++) {
         P_at_k_delta -= P_shares[party][k];
       }
-      P_deltas[repetition][k] = P_at_k_delta;
+      P_deltas[repetition][k - instance.m2] = P_at_k_delta;
       // adjust first share
       P_shares[0][k] += P_at_k_delta;
     }
@@ -562,4 +569,48 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   banquet_signature_t signature{salt, h_1, h_2, h_3, proofs};
 
   return signature;
+}
+
+std::vector<uint8_t>
+banquet_serialize_signature(const banquet_instance_t &instance,
+                            const banquet_signature_t &signature) {
+  std::vector<uint8_t> serialized;
+
+  serialized.insert(serialized.end(), signature.salt.begin(),
+                    signature.salt.end());
+  serialized.insert(serialized.end(), signature.h_1.begin(),
+                    signature.h_1.end());
+  serialized.insert(serialized.end(), signature.h_2.begin(),
+                    signature.h_2.end());
+  serialized.insert(serialized.end(), signature.h_3.begin(),
+                    signature.h_3.end());
+
+  for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    const banquet_repetition_proof_t &proof = signature.proofs[repetition];
+    for (const seed_t &seed : proof.reveallist.first) {
+      serialized.insert(serialized.end(), seed.begin(), seed.end());
+    }
+    serialized.insert(serialized.end(), proof.C_e.begin(), proof.C_e.end());
+    serialized.insert(serialized.end(), proof.sk_delta.begin(),
+                      proof.sk_delta.end());
+    serialized.insert(serialized.end(), proof.t_delta.begin(),
+                      proof.t_delta.end());
+    for (size_t k = 0; k < instance.m2 + 1; k++) {
+      std::vector<uint8_t> buffer = GF2E_to_bytes(proof.P_delta[k]);
+      serialized.insert(serialized.end(), buffer.begin(), buffer.end());
+    }
+    {
+      std::vector<uint8_t> buffer = GF2E_to_bytes(proof.P_at_R);
+      serialized.insert(serialized.end(), buffer.begin(), buffer.end());
+    }
+    for (size_t j = 0; j < instance.m1; j++) {
+      std::vector<uint8_t> buffer = GF2E_to_bytes(proof.S_j_at_R[j]);
+      serialized.insert(serialized.end(), buffer.begin(), buffer.end());
+    }
+    for (size_t j = 0; j < instance.m1; j++) {
+      std::vector<uint8_t> buffer = GF2E_to_bytes(proof.T_j_at_R[j]);
+      serialized.insert(serialized.end(), buffer.begin(), buffer.end());
+    }
+  }
+  return serialized;
 }
