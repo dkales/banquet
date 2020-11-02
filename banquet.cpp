@@ -4,9 +4,14 @@
 #include "kdf_shake.h"
 #include "tape.h"
 #include "tree.h"
+#include "utils.h"
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+
+#include <NTL/GF2E.h>
+#include <NTL/GF2EX.h>
+using namespace NTL;
 
 banquet_keypair_t banquet_keygen(const banquet_instance_t &instance) {}
 
@@ -75,20 +80,22 @@ phase_1_commitment(const banquet_instance_t &instance,
   return commitment;
 }
 
-static std::vector<std::vector<std::vector<uint8_t>>>
+static std::vector<std::vector<GF2E>>
 phase_1_expand(const banquet_instance_t &instance, const digest_t &h_1) {
   hash_context ctx;
   hash_init(&ctx, DIGEST_SIZE);
   hash_update(&ctx, h_1.data(), h_1.size());
   hash_final(&ctx);
 
-  std::vector<std::vector<std::vector<uint8_t>>> r_ejs;
+  std::vector<std::vector<GF2E>> r_ejs;
+  r_ejs.reserve(instance.num_rounds);
   for (size_t e = 0; e < instance.num_rounds; e++) {
-    std::vector<std::vector<uint8_t>> r_js;
+    std::vector<GF2E> r_js;
+    r_js.reserve(instance.m1);
     for (size_t j = 0; j < instance.m1; j++) {
       std::vector<uint8_t> r(instance.lambda);
       hash_squeeze(&ctx, r.data(), r.size());
-      r_js.push_back(r);
+      r_js.push_back(utils::GF2E_from_bytes(r));
     }
     r_ejs.push_back(r_js);
   }
@@ -97,7 +104,7 @@ phase_1_expand(const banquet_instance_t &instance, const digest_t &h_1) {
 static digest_t
 phase_2_commitment(const banquet_instance_t &instance,
                    const banquet_salt_t &salt, const digest_t &h_1,
-                   const std::vector<std::vector<digest_t>> &P_deltas) {
+                   const std::vector<std::vector<GF2E>> &P_deltas) {
 
   hash_context ctx;
   hash_init_prefix(&ctx, DIGEST_SIZE, HASH_PREFIX_2);
@@ -106,8 +113,11 @@ phase_2_commitment(const banquet_instance_t &instance,
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     for (size_t k = 0; k < instance.m2; k++) {
-      hash_update(&ctx, P_deltas[repetition][k].data(),
-                  P_deltas[repetition][k].size());
+      const GF2X &poly_rep = rep(P_deltas[repetition][k]);
+      std::vector<uint8_t> buffer(NumBytes(poly_rep));
+      BytesFromGF2X(buffer.data(), poly_rep, buffer.size());
+
+      hash_update(&ctx, buffer.data(), buffer.size());
     }
   }
   hash_final(&ctx);
@@ -247,7 +257,8 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
   /////////////////////////////////////////////////////////////////////////////
   std::vector<std::vector<aes_block_t>> rep_shared_keys;
   std::vector<aes_block_t> rep_key_deltas;
-  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_ts;
+  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_s;
+  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_t;
   std::vector<std::vector<uint8_t>> rep_t_deltas;
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
@@ -283,7 +294,7 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
     std::transform(std::begin(t_deltas), std::end(t_deltas),
                    std::begin(shared_ts[0]), std::begin(shared_ts[0]),
                    std::bit_xor<uint8_t>());
-    rep_shared_ts.push_back(shared_ts);
+    rep_shared_t.push_back(shared_ts);
     rep_t_deltas.push_back(t_deltas);
   }
 
@@ -297,47 +308,135 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
                                     rep_key_deltas, rep_t_deltas);
 
   // expand challenge hash to M * m1 values
-  std::vector<std::vector<std::vector<uint8_t>>> r_ejs =
-      phase_1_expand(instance, h_1);
+  std::vector<std::vector<GF2E>> r_ejs = phase_1_expand(instance, h_1);
 
   /////////////////////////////////////////////////////////////////////////////
   // phase 3: commit to the checking polynomials
   /////////////////////////////////////////////////////////////////////////////
 
+  // init modulus of extension field F_{2^{8\lambda}}
+  utils::init_extension_field(instance);
+
+  // a vector of the first m2+1 field elements for interpolation
+  vec_GF2E x_values_for_interpolation =
+      utils::get_first_n_field_elements(instance.m2 + 1);
+  vec_GF2E x_values_for_interpolation_zero_to_2m2 =
+      utils::get_first_n_field_elements(2 * instance.m2 + 1);
+
+  std::vector<std::vector<std::vector<GF2EX>>> S_eji(instance.num_rounds);
+  std::vector<std::vector<std::vector<GF2EX>>> T_eji(instance.num_rounds);
+  std::vector<GF2EX> P_e(instance.num_rounds);
+  std::vector<std::vector<GF2EX>> P_ei(instance.num_rounds);
+  std::vector<std::vector<GF2E>> P_deltas(instance.num_rounds);
+
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    S_eji[repetition].resize(instance.num_MPC_parties);
+    T_eji[repetition].resize(instance.num_MPC_parties);
+    P_ei[repetition].resize(instance.num_MPC_parties);
+    P_deltas[repetition].resize(instance.m2 + 1);
+
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      S_eji[repetition][party].resize(instance.m1);
+      T_eji[repetition][party].resize(instance.m1);
       // lift shares from F_{2^8} to F_{2^{8\lambda}}
+      std::vector<GF2E> lifted_s;
+      std::vector<GF2E> lifted_t;
+      lifted_s.reserve(NUM_SBOXES_AES_128);
+      lifted_t.reserve(NUM_SBOXES_AES_128);
+      for (size_t idx = 0; idx < NUM_SBOXES_AES_128; idx++) {
+        lifted_s.push_back(
+            utils::lift_uint8_t(rep_shared_s[repetition][party][idx]));
+        lifted_t.push_back(
+            utils::lift_uint8_t(rep_shared_t[repetition][party][idx]));
+      }
+      std::vector<vec_GF2E> s_bar(instance.m1);
+      std::vector<vec_GF2E> t_bar(instance.m1);
 
       for (size_t j = 0; j < instance.m1; j++) {
         // rearrange shares
+        s_bar[j].SetLength(instance.m2 + 1);
+        t_bar[j].SetLength(instance.m2 + 1);
+        for (size_t k = 0; k < instance.m2; k++) {
+          s_bar[j][k] = r_ejs[repetition][j] * lifted_s[j + instance.m1 * k];
+          t_bar[j][k] = lifted_t[j + instance.m1 * k];
+        }
 
         // sample additional random points
         std::vector<uint8_t> s_ej_bar(instance.lambda);
         random_tapes[repetition][party].squeeze_bytes(s_ej_bar.data(),
                                                       s_ej_bar.size());
+
         std::vector<uint8_t> t_ej_bar(instance.lambda);
         random_tapes[repetition][party].squeeze_bytes(t_ej_bar.data(),
                                                       t_ej_bar.size());
+        s_bar[j][instance.m2] = utils::GF2E_from_bytes(s_ej_bar);
+        t_bar[j][instance.m2] = utils::GF2E_from_bytes(t_ej_bar);
 
         // interpolate polynomials S_ej^i and T_ej^i
+        S_eji[repetition][party][j] =
+            interpolate(x_values_for_interpolation, s_bar[j]);
+        T_eji[repetition][party][j] =
+            interpolate(x_values_for_interpolation, t_bar[j]);
       }
     }
 
     // compute product polynomial P_e
+    GF2EX P;
+    for (size_t j = 0; j < instance.m1; j++) {
+      GF2EX S_sum;
+      GF2EX T_sum;
 
+      for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+        S_sum += S_eji[repetition][party][j];
+        T_sum += T_eji[repetition][party][j];
+      }
+
+      P += S_sum * T_sum;
+    }
+    P_e[repetition] = P;
+
+    // compute sharing of P
+    std::vector<vec_GF2E> P_shares(instance.num_MPC_parties);
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      // compute sharing of P
-
       // first m2 points: first party = sum of r_e,j, other parties = 0
+      P_shares[party].SetLength(2 * instance.m2 + 1);
+      if (party == 0) {
+        GF2E sum_r;
+        for (size_t j = 0; j < instance.m1; j++) {
+          sum_r += r_ejs[repetition][j];
+        }
+        for (size_t k = 0; k < instance.m2; k++) {
+          P_shares[party][k] = sum_r;
+        }
+      } else {
+        for (size_t k = 0; k < instance.m2; k++) {
+          P_shares[party][k] = GF2E::zero();
+        }
+      }
 
       // second m2+1 points: sample from random tape
+      for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
+        std::vector<uint8_t> P_k_share(instance.lambda);
+        random_tapes[repetition][party].squeeze_bytes(P_k_share.data(),
+                                                      P_k_share.size());
+        P_shares[party][k] = utils::GF2E_from_bytes(P_k_share);
+      }
     }
     for (size_t k = instance.m2; k < 2 * instance.m2; k++) {
       // calculate offset
+      GF2E k_element = x_values_for_interpolation_zero_to_2m2[k];
+      GF2E P_at_k_delta = eval(P, k_element);
+      for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+        P_at_k_delta -= P_shares[party][k];
+      }
+      P_deltas[repetition][k] = P_at_k_delta;
       // adjust first share
+      P_shares[0][k] += P_at_k_delta;
     }
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       // iterpolate polynomial P_e^1 from 2m+1 points
+      P_ei[repetition][party] =
+          interpolate(x_values_for_interpolation_zero_to_2m2, P_shares[party]);
     }
   }
 
