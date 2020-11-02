@@ -39,6 +39,6 @@ struct banquet_instance_t {
   banquet_params_t params;
 };
 
-const banquet_instance_t *banquet_instance_get(banquet_params_t param);
+const banquet_instance_t &banquet_instance_get(banquet_params_t param);
 
 #endif

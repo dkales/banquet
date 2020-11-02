@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <vector>
 
-typedef std::array<uint8_t, 16> aes_block_t;
 constexpr size_t NUM_SBOXES_AES_128 = 200;
 
 bool aes_128(const aes_block_t &key_in, const aes_block_t &plaintext_in,

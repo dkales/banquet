@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #include <NTL/GF2X.h>
+#include <stdexcept>
 
 using namespace NTL;
 
@@ -19,8 +20,12 @@ void init_GF2E_modulus(const banquet_instance_t &instance) {
     SetCoeff(modulus, 2);
     SetCoeff(modulus, 1);
     SetCoeff(modulus, 0);
-    // generator of 2^8 sized subfield = y^27 + y^23 + y^22 + y^21 + y^19 + y^17
-    // + y^13 + y^12 + y^6 + y^5 + y^2 + 1
+    // Ring morphism:
+    //   From: Finite Field in x of size 2^8
+    //   To:   Finite Field in y of size 2^32
+    //   Defn: x |--> y^27 + y^23 + y^22 + y^21 + y^19 + y^17 + y^13 + y^12 +
+    //   y^6
+    //   + y^5 + y^2 + 1
     clear(generator);
     SetCoeff(generator, 27);
     SetCoeff(generator, 23);
@@ -41,14 +46,6 @@ void init_GF2E_modulus(const banquet_instance_t &instance) {
     throw std::runtime_error(
         "modulus for that specific lambda not implemented.");
   }
-}
-
-static GF2E lift_uint8_t_lambda_4(uint8_t value) {
-  // Ring morphism:
-  //   From: Finite Field in x of size 2^8
-  //   To:   Finite Field in y of size 2^32
-  //   Defn: x |--> y^27 + y^23 + y^22 + y^21 + y^19 + y^17 + y^13 + y^12 + y^6
-  //   + y^5 + y^2 + 1
 }
 
 GF2E lift_uint8_t(uint8_t value) {

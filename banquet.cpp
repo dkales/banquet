@@ -9,16 +9,22 @@
 #include <cassert>
 #include <cstring>
 
-#include <NTL/GF2E.h>
 #include <NTL/GF2EX.h>
-using namespace NTL;
 
 banquet_keypair_t banquet_keygen(const banquet_instance_t &instance) {}
 
+static void hash_update_GF2E(hash_context *ctx, const GF2E &element) {
+  const GF2X &poly_rep = rep(element);
+  std::vector<uint8_t> buffer(NumBytes(poly_rep));
+  BytesFromGF2X(buffer.data(), poly_rep, buffer.size());
+
+  hash_update(ctx, buffer.data(), buffer.size());
+}
+
 static std::pair<banquet_salt_t, std::vector<seed_t>>
 generate_salt_and_seeds(const banquet_instance_t &instance,
-                        const banquet_keypair_t &keypair, uint8_t *message,
-                        size_t message_len) {
+                        const banquet_keypair_t &keypair,
+                        const uint8_t *message, size_t message_len) {
   // salt, seed_1, ..., seed_r = H(instance||sk||pk||m)
   hash_context ctx;
   hash_init(&ctx, DIGEST_SIZE);
@@ -113,11 +119,7 @@ phase_2_commitment(const banquet_instance_t &instance,
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     for (size_t k = 0; k < instance.m2; k++) {
-      const GF2X &poly_rep = rep(P_deltas[repetition][k]);
-      std::vector<uint8_t> buffer(NumBytes(poly_rep));
-      BytesFromGF2X(buffer.data(), poly_rep, buffer.size());
-
-      hash_update(&ctx, buffer.data(), buffer.size());
+      hash_update_GF2E(&ctx, P_deltas[repetition][k]);
     }
   }
   hash_final(&ctx);
@@ -127,32 +129,45 @@ phase_2_commitment(const banquet_instance_t &instance,
   return commitment;
 }
 
-static std::vector<std::vector<uint8_t>>
-phase_2_expand(const banquet_instance_t &instance, const digest_t &h_2) {
+static std::vector<GF2E> phase_2_expand(const banquet_instance_t &instance,
+                                        const digest_t &h_2,
+                                        const vec_GF2E &forbidden_values) {
   hash_context ctx;
   hash_init(&ctx, DIGEST_SIZE);
   hash_update(&ctx, h_2.data(), h_2.size());
   hash_final(&ctx);
 
-  std::vector<std::vector<uint8_t>> R_es;
+  std::vector<GF2E> R_es;
   for (size_t e = 0; e < instance.num_rounds; e++) {
     std::vector<uint8_t> R(instance.lambda);
-    hash_squeeze(&ctx, R.data(), R.size());
-    // TODO: check that R is not in {0,...m2-1}
-    R_es.push_back(R);
+    while (true) {
+      hash_squeeze(&ctx, R.data(), R.size());
+      //  check that R is not in {0,...m2-1}
+      GF2E candidate_R = utils::GF2E_from_bytes(R);
+      bool good = true;
+      for (size_t k = 0; k < instance.m2; k++) {
+        if (candidate_R == forbidden_values[k]) {
+          good = false;
+          break;
+        }
+      }
+      if (good) {
+        R_es.push_back(candidate_R);
+        break;
+      }
+    }
   }
   return R_es;
 }
 
 static digest_t phase_3_commitment(
     const banquet_instance_t &instance, const banquet_salt_t &salt,
-    const digest_t &h_2, const std::vector<std::vector<uint8_t>> &c,
-    const std::vector<std::vector<std::vector<uint8_t>>> &c_shares,
-    const std::vector<std::vector<std::vector<uint8_t>>> &a,
-    const std::vector<std::vector<std::vector<std::vector<uint8_t>>>> &a_shares,
-    const std::vector<std::vector<std::vector<uint8_t>>> &b,
-    const std::vector<std::vector<std::vector<std::vector<uint8_t>>>>
-        &b_shares) {
+    const digest_t &h_2, const std::vector<GF2E> &c,
+    const std::vector<std::vector<GF2E>> &c_shares,
+    const std::vector<std::vector<GF2E>> &a,
+    const std::vector<std::vector<std::vector<GF2E>>> &a_shares,
+    const std::vector<std::vector<GF2E>> &b,
+    const std::vector<std::vector<std::vector<GF2E>>> &b_shares) {
 
   hash_context ctx;
   hash_init_prefix(&ctx, DIGEST_SIZE, HASH_PREFIX_3);
@@ -160,19 +175,16 @@ static digest_t phase_3_commitment(
   hash_update(&ctx, h_2.data(), h_2.size());
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
-    hash_update(&ctx, c[repetition].data(), c[repetition].size());
+    hash_update_GF2E(&ctx, c[repetition]);
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      hash_update(&ctx, c_shares[repetition][party].data(),
-                  c_shares[repetition][party].size());
+      hash_update_GF2E(&ctx, c_shares[repetition][party]);
     }
     for (size_t j = 0; j < instance.m1; j++) {
-      hash_update(&ctx, a[repetition][j].data(), a[repetition][j].size());
-      hash_update(&ctx, b[repetition][j].data(), b[repetition][j].size());
+      hash_update_GF2E(&ctx, a[repetition][j]);
+      hash_update_GF2E(&ctx, b[repetition][j]);
       for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-        hash_update(&ctx, a_shares[repetition][j][party].data(),
-                    a_shares[repetition][j][party].size());
-        hash_update(&ctx, b_shares[repetition][j][party].data(),
-                    b_shares[repetition][j][party].size());
+        hash_update_GF2E(&ctx, a_shares[repetition][party][j]);
+        hash_update_GF2E(&ctx, b_shares[repetition][party][j]);
       }
     }
   }
@@ -203,9 +215,9 @@ static std::vector<uint8_t> phase_3_expand(const banquet_instance_t &instance,
   return opened_parties;
 }
 
-std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
-                                  const banquet_keypair_t &keypair,
-                                  uint8_t *message, size_t message_len) {
+banquet_signature_t banquet_sign(const banquet_instance_t &instance,
+                                 const banquet_keypair_t &keypair,
+                                 const uint8_t *message, size_t message_len) {
   // grab aes key, pt and ct
   aes_block_t key = keypair.first;
   aes_block_t pt, ct, ct2;
@@ -302,8 +314,8 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
   // phase 2: challenge the multiplications
   /////////////////////////////////////////////////////////////////////////////
 
-  // commit to salt, (all commitments of parties seeds, key_delta, t_delta) for
-  // all repetitions
+  // commit to salt, (all commitments of parties seeds, key_delta, t_delta)
+  // for all repetitions
   digest_t h_1 = phase_1_commitment(instance, salt, party_seed_commitments,
                                     rep_key_deltas, rep_t_deltas);
 
@@ -318,7 +330,7 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
   utils::init_extension_field(instance);
 
   // a vector of the first m2+1 field elements for interpolation
-  vec_GF2E x_values_for_interpolation =
+  vec_GF2E x_values_for_interpolation_zero_to_m2 =
       utils::get_first_n_field_elements(instance.m2 + 1);
   vec_GF2E x_values_for_interpolation_zero_to_2m2 =
       utils::get_first_n_field_elements(2 * instance.m2 + 1);
@@ -374,9 +386,9 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
 
         // interpolate polynomials S_ej^i and T_ej^i
         S_eji[repetition][party][j] =
-            interpolate(x_values_for_interpolation, s_bar[j]);
+            interpolate(x_values_for_interpolation_zero_to_m2, s_bar[j]);
         T_eji[repetition][party][j] =
-            interpolate(x_values_for_interpolation, t_bar[j]);
+            interpolate(x_values_for_interpolation_zero_to_m2, t_bar[j]);
       }
     }
 
@@ -447,20 +459,51 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
   digest_t h_2 = phase_2_commitment(instance, salt, h_1, P_deltas);
 
   // expand challenge hash to M values
-  std::vector<std::vector<uint8_t>> R_es = phase_2_expand(instance, h_2);
+
+  vec_GF2E forbidden_challenge_values =
+      utils::get_first_n_field_elements(instance.m2);
+  std::vector<GF2E> R_es =
+      phase_2_expand(instance, h_2, forbidden_challenge_values);
 
   /////////////////////////////////////////////////////////////////////////////
   // phase 5: commit to the views of the checking protocol
   /////////////////////////////////////////////////////////////////////////////
 
+  std::vector<GF2E> c(instance.num_rounds);
+  std::vector<std::vector<GF2E>> c_shares(instance.num_rounds);
+  std::vector<std::vector<GF2E>> a(instance.num_rounds);
+  std::vector<std::vector<std::vector<GF2E>>> a_shares(instance.num_rounds);
+  std::vector<std::vector<GF2E>> b(instance.num_rounds);
+  std::vector<std::vector<std::vector<GF2E>>> b_shares(instance.num_rounds);
+
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    c_shares[repetition].resize(instance.num_MPC_parties);
+    a[repetition].resize(instance.m1);
+    b[repetition].resize(instance.m1);
+    a_shares[repetition].resize(instance.num_MPC_parties);
+    b_shares[repetition].resize(instance.num_MPC_parties);
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      a_shares[repetition][party].resize(instance.m1);
+      b_shares[repetition][party].resize(instance.m1);
       for (size_t j = 0; j < instance.m1; j++) {
         // compute a_ej^i and b_ej^i
+        a_shares[repetition][party][j] =
+            eval(S_eji[repetition][party][j], R_es[repetition]);
+        b_shares[repetition][party][j] =
+            eval(T_eji[repetition][party][j], R_es[repetition]);
       }
       // compute c_e^i
+      c_shares[repetition][party] =
+          eval(P_ei[repetition][party], R_es[repetition]);
     }
     // open c_e and a,b values
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      c[repetition] += c_shares[repetition][party];
+      for (size_t j = 0; j < instance.m1; j++) {
+        a[repetition][j] += a_shares[repetition][party][j];
+        b[repetition][j] += b_shares[repetition][party][j];
+      }
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -470,15 +513,34 @@ std::vector<uint8_t> banquet_sign(const banquet_instance_t &instance,
   digest_t h_3 = phase_3_commitment(instance, salt, h_2, c, c_shares, a,
                                     a_shares, b, b_shares);
 
-  std::vector<uint8_t> opened_parties = phase_3_expand(instance, h_3);
+  std::vector<uint8_t> missing_parties = phase_3_expand(instance, h_3);
 
   /////////////////////////////////////////////////////////////////////////////
   // phase 7: Open the views of the checking protocol
   /////////////////////////////////////////////////////////////////////////////
-  std::vector<SeedTree::reveal_list_t> seeds;
+  std::vector<reveal_list_t> seeds;
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     seeds.push_back(
-        seed_trees[repetition].reveal_all_but(opened_parties[repetition]));
+        seed_trees[repetition].reveal_all_but(missing_parties[repetition]));
   }
-  // serialize signature
+  // build signature
+  std::vector<banquet_repetition_proof_t> proofs;
+  for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    size_t missing_party = missing_parties[repetition];
+    banquet_repetition_proof_t proof{
+        seeds[repetition],
+        party_seed_commitments[repetition][missing_party],
+        rep_key_deltas[repetition],
+        rep_t_deltas[repetition],
+        P_deltas[repetition],
+        c[repetition],
+        a[repetition],
+        b[repetition],
+    };
+    proofs.push_back(proof);
+  }
+
+  banquet_signature_t signature{salt, h_1, h_2, h_3, proofs};
+
+  return signature;
 }

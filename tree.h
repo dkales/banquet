@@ -6,18 +6,10 @@
 #include <optional>
 #include <vector>
 
-#include "banquet.h"
-
-constexpr size_t SEED_SIZE = 16;
-constexpr size_t DIGEST_SIZE = 32;
-
-typedef std::array<uint8_t, SEED_SIZE> seed_t;
-typedef std::array<uint8_t, DIGEST_SIZE> digest_t;
+#include "types.h"
 
 class SeedTree {
 public:
-  typedef std::pair<std::vector<seed_t>, size_t> reveal_list_t;
-
 private:
   // data, layed out continously in memory root at [0], its two children at [1],
   // [2], in general node at [n], children at [2*n + 1], [2*n + 2]
@@ -48,18 +40,4 @@ public:
 
   reveal_list_t reveal_all_but(size_t leaf_idx);
   std::optional<seed_t> get_leaf(size_t leaf_idx);
-};
-
-class MerkleTree {
-private:
-  /* data */
-public:
-  typedef std::array<uint8_t, DIGEST_SIZE> Digest;
-
-  // build a merkle tree from a list of digests
-  MerkleTree(const std::vector<MerkleTree::Digest> &digests);
-  ~MerkleTree();
-
-  // get root digest
-  Digest get_root();
 };

@@ -68,9 +68,8 @@ std::pair<seed_t, seed_t> SeedTree::expandSeed(const seed_t &seed,
   return std::make_pair(ret1, ret2);
 }
 
-SeedTree::SeedTree(const SeedTree::reveal_list_t &reveallist,
-                   const size_t num_leaves, const banquet_salt_t &salt,
-                   const size_t rep_idx)
+SeedTree::SeedTree(const reveal_list_t &reveallist, const size_t num_leaves,
+                   const banquet_salt_t &salt, const size_t rep_idx)
     : _data(), _node_exists(), _num_leaves(num_leaves) {
   size_t tree_depth = 1 + ceil_log2(num_leaves);
 
@@ -147,7 +146,7 @@ SeedTree::SeedTree(const SeedTree::reveal_list_t &reveallist,
   }
 }
 
-SeedTree::reveal_list_t SeedTree::reveal_all_but(size_t leaf_idx) {
+reveal_list_t SeedTree::reveal_all_but(size_t leaf_idx) {
   // calculate path up to root for missing leaf
   std::vector<seed_t> path;
 
