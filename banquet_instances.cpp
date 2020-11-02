@@ -23,7 +23,7 @@ static banquet_instance_t instances[PARAMETER_SET_MAX_INDEX] = {
         0,
         PARAMETER_SET_INVALID,
     },
-    {32, 16, 42, 64, 16, 16, 0, 10, 20, 2, Banquet_L1_Param1},
+    {32, 16, 31, 64, 16, 16, 0, 10, 20, 4, Banquet_L1_Param1},
 };
 
 const banquet_instance_t *banquet_instance_get(banquet_params_t param) {
