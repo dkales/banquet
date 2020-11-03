@@ -16,15 +16,18 @@ extern "C" {
 #include <NTL/GF2EX.h>
 
 namespace {
-inline std::vector<uint8_t> GF2E_to_bytes(const GF2E &element) {
+inline std::vector<uint8_t> GF2E_to_bytes(const banquet_instance_t &instance,
+                                          const GF2E &element) {
   const GF2X &poly_rep = rep(element);
-  std::vector<uint8_t> buffer(NumBytes(poly_rep));
+  std::vector<uint8_t> buffer(instance.lambda);
   BytesFromGF2X(buffer.data(), poly_rep, buffer.size());
   return buffer;
 }
 
-inline void hash_update_GF2E(hash_context *ctx, const GF2E &element) {
-  std::vector<uint8_t> buffer = GF2E_to_bytes(element);
+inline void hash_update_GF2E(hash_context *ctx,
+                             const banquet_instance_t &instance,
+                             const GF2E &element) {
+  std::vector<uint8_t> buffer = GF2E_to_bytes(instance, element);
   hash_update(ctx, buffer.data(), buffer.size());
 }
 
@@ -126,7 +129,7 @@ digest_t phase_2_commitment(const banquet_instance_t &instance,
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     for (size_t k = 0; k < instance.m2; k++) {
-      hash_update_GF2E(&ctx, P_deltas[repetition][k]);
+      hash_update_GF2E(&ctx, instance, P_deltas[repetition][k]);
     }
   }
   hash_final(&ctx);
@@ -182,16 +185,16 @@ digest_t phase_3_commitment(
   hash_update(&ctx, h_2.data(), h_2.size());
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
-    hash_update_GF2E(&ctx, c[repetition]);
+    hash_update_GF2E(&ctx, instance, c[repetition]);
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      hash_update_GF2E(&ctx, c_shares[repetition][party]);
+      hash_update_GF2E(&ctx, instance, c_shares[repetition][party]);
     }
     for (size_t j = 0; j < instance.m1; j++) {
-      hash_update_GF2E(&ctx, a[repetition][j]);
-      hash_update_GF2E(&ctx, b[repetition][j]);
+      hash_update_GF2E(&ctx, instance, a[repetition][j]);
+      hash_update_GF2E(&ctx, instance, b[repetition][j]);
       for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-        hash_update_GF2E(&ctx, a_shares[repetition][party][j]);
-        hash_update_GF2E(&ctx, b_shares[repetition][party][j]);
+        hash_update_GF2E(&ctx, instance, a_shares[repetition][party][j]);
+        hash_update_GF2E(&ctx, instance, b_shares[repetition][party][j]);
       }
     }
   }
@@ -605,19 +608,19 @@ banquet_serialize_signature(const banquet_instance_t &instance,
     serialized.insert(serialized.end(), proof.t_delta.begin(),
                       proof.t_delta.end());
     for (size_t k = 0; k < instance.m2 + 1; k++) {
-      std::vector<uint8_t> buffer = GF2E_to_bytes(proof.P_delta[k]);
+      std::vector<uint8_t> buffer = GF2E_to_bytes(instance, proof.P_delta[k]);
       serialized.insert(serialized.end(), buffer.begin(), buffer.end());
     }
     {
-      std::vector<uint8_t> buffer = GF2E_to_bytes(proof.P_at_R);
+      std::vector<uint8_t> buffer = GF2E_to_bytes(instance, proof.P_at_R);
       serialized.insert(serialized.end(), buffer.begin(), buffer.end());
     }
     for (size_t j = 0; j < instance.m1; j++) {
-      std::vector<uint8_t> buffer = GF2E_to_bytes(proof.S_j_at_R[j]);
+      std::vector<uint8_t> buffer = GF2E_to_bytes(instance, proof.S_j_at_R[j]);
       serialized.insert(serialized.end(), buffer.begin(), buffer.end());
     }
     for (size_t j = 0; j < instance.m1; j++) {
-      std::vector<uint8_t> buffer = GF2E_to_bytes(proof.T_j_at_R[j]);
+      std::vector<uint8_t> buffer = GF2E_to_bytes(instance, proof.T_j_at_R[j]);
       serialized.insert(serialized.end(), buffer.begin(), buffer.end());
     }
   }
