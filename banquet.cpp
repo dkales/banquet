@@ -253,7 +253,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   memcpy(ct.data(), keypair.second.data() + pt.size(), ct.size());
 
   // get sbox inputs and outputs for aes evaluation
-  std::vector<std::pair<uint8_t, uint8_t>> sbox_pairs =
+  std::pair<std::vector<uint8_t>, std::vector<uint8_t>> sbox_pairs =
       aes_128_with_sbox_output(key, pt, ct2);
   // sanity check, incoming keypair is valid
   assert(ct == ct2);
@@ -322,21 +322,30 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     rep_shared_keys.push_back(shared_key);
     rep_key_deltas.push_back(key_delta);
     // generate sharing of t values
-    std::vector<std::vector<uint8_t>> shared_ts(instance.num_MPC_parties);
-    std::vector<uint8_t> t_deltas(NUM_SBOXES_AES_128); // todo: copy initial ts
+    std::vector<std::vector<uint8_t>> shared_t(instance.num_MPC_parties);
+    std::vector<uint8_t> t_deltas = sbox_pairs.second;
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      shared_ts[party].resize(NUM_SBOXES_AES_128);
-      std::transform(std::begin(shared_ts[party]), std::end(shared_ts[party]),
+      shared_t[party].resize(NUM_SBOXES_AES_128);
+      random_tapes[repetition][party].squeeze_bytes(shared_t[party].data(),
+                                                    shared_t[party].size());
+      std::transform(std::begin(shared_t[party]), std::end(shared_t[party]),
                      std::begin(t_deltas), std::begin(t_deltas),
                      std::bit_xor<uint8_t>());
     }
     // fix first share
     std::transform(std::begin(t_deltas), std::end(t_deltas),
-                   std::begin(shared_ts[0]), std::begin(shared_ts[0]),
+                   std::begin(shared_t[0]), std::begin(shared_t[0]),
                    std::bit_xor<uint8_t>());
-    rep_shared_t.push_back(shared_ts);
-    rep_shared_s.push_back(shared_ts);
+    rep_shared_t.push_back(shared_t);
     rep_t_deltas.push_back(t_deltas);
+
+    // get shares of sbox inputs by executing MPC AES
+    aes_block_t ct_check;
+    std::vector<std::vector<uint8_t>> shared_s =
+        aes_128_s_shares(shared_key, shared_t, pt, ct_check);
+    // sanity check, mpc execution = plain one
+    assert(ct == ct_check);
+    rep_shared_s.push_back(shared_s);
   }
 
   /////////////////////////////////////////////////////////////////////////////

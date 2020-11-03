@@ -11,14 +11,9 @@ FIND_PATH(NTL_INCLUDE_DIR RR.h
   $ENV{NTLDIR}
   PATH_SUFFIXES NTL include/NTL include
   PATHS
-  ~/Library/Frameworks
-  /Library/Frameworks
+  ~/local
   /usr/local
   /usr
-  /sw # Fink
-  /opt/local # DarwinPorts
-  /opt/csw # Blastwave
-  /opt
 )
 
 FIND_LIBRARY(NTL_LIBRARY
@@ -27,16 +22,12 @@ FIND_LIBRARY(NTL_LIBRARY
   $ENV{NTLDIR}
   PATH_SUFFIXES lib64 lib libs64 libs libs/Win32 libs/Win64
   PATHS
-  ~/Library/Frameworks
-  /Library/Frameworks
+  ~/local
   /usr/local
   /usr
-  /sw
-  /opt/local
-  /opt/csw
-  /opt
 )
 
+MESSAGE(STATUS "NTL libs: " ${NTL_LIBRARY})
 # handle the QUIETLY and REQUIRED arguments and set NTL_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)

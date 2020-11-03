@@ -1,21 +1,17 @@
 /*
- *  This file is part of the optimized implementation of the Picnic signature scheme.
- *  See the accompanying documentation for complete details.
+ *  This file is part of the optimized implementation of the Picnic signature
+ * scheme. See the accompanying documentation for complete details.
  *
  *  The code is provided under the MIT license, see LICENSE for
  *  more details.
  *  SPDX-License-Identifier: MIT
  */
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
 #include "bench_timing.h"
 
-#include <time.h>
-#include <limits.h>
-#include <string.h>
+#include <climits>
+#include <cstring>
+#include <ctime>
 
 #if defined(__linux__) && defined(__aarch64__)
 #include <setjmp.h>
@@ -52,12 +48,13 @@
 #define ARMV8_PMUSERENR_CR (1 << 2) /* Cycle counter read enable */
 #define ARMV8_PMUSERENR_ER (1 << 3) /* Event counter read enable */
 
-#define ARMV8_PMCNTENSET_EL0_EN (1 << 31) /* Performance Monitors Count Enable Set register */
+#define ARMV8_PMCNTENSET_EL0_EN                                                \
+  (1 << 31) /* Performance Monitors Count Enable Set register */
 
-static void armv8_close(timing_context_t* ctx) {
+static void armv8_close(timing_context_t *ctx) {
   (void)ctx;
   uint32_t value = 0;
-  uint32_t mask  = 0;
+  uint32_t mask = 0;
 
   /* Disable Performance Counter */
   asm volatile("MRS %0, PMCR_EL0" : "=r"(value));
@@ -74,7 +71,7 @@ static void armv8_close(timing_context_t* ctx) {
   asm volatile("MSR PMCNTENSET_EL0, %0" : : "r"(value & ~mask));
 }
 
-static uint64_t armv8_read(timing_context_t* ctx) {
+static uint64_t armv8_read(timing_context_t *ctx) {
   (void)ctx;
   uint64_t result = 0;
   asm volatile("MRS %0, PMCCNTR_EL0" : "=r"(result));
@@ -91,7 +88,7 @@ static void armv8_sigill_handler(int sig) {
   siglongjmp(jmpbuf, 1);
 }
 
-static bool armv8_init(timing_context_t* ctx) {
+static bool armv8_init(timing_context_t *ctx) {
   if (armv8_sigill) {
     return false;
   }
@@ -126,7 +123,7 @@ static bool armv8_init(timing_context_t* ctx) {
   // Restore old signal handler
   sigaction(SIGILL, &oldact, NULL);
 
-  ctx->read  = armv8_read;
+  ctx->read = armv8_read;
   ctx->close = armv8_close;
 
   return true;
@@ -139,14 +136,14 @@ static bool armv8_init(timing_context_t* ctx) {
 #include <sys/syscall.h>
 #include <unistd.h>
 
-static void perf_close(timing_context_t* ctx) {
+static void perf_close(timing_context_t *ctx) {
   if (ctx->data.fd != -1) {
     close(ctx->data.fd);
     ctx->data.fd = -1;
   }
 }
 
-static uint64_t perf_read(timing_context_t* ctx) {
+static uint64_t perf_read(timing_context_t *ctx) {
   uint64_t tmp_time;
   if (read(ctx->data.fd, &tmp_time, sizeof(tmp_time)) != sizeof(tmp_time)) {
     return UINT64_MAX;
@@ -155,8 +152,8 @@ static uint64_t perf_read(timing_context_t* ctx) {
   return tmp_time;
 }
 
-static int perf_event_open(struct perf_event_attr* event, pid_t pid, int cpu, int gfd,
-                           unsigned long flags) {
+static int perf_event_open(struct perf_event_attr *event, pid_t pid, int cpu,
+                           int gfd, unsigned long flags) {
   const long fd = syscall(__NR_perf_event_open, event, pid, cpu, gfd, flags);
   if (fd > INT_MAX) {
     /* too large to handle, but should never happen */
@@ -166,19 +163,19 @@ static int perf_event_open(struct perf_event_attr* event, pid_t pid, int cpu, in
   return fd;
 }
 
-static bool perf_init(timing_context_t* ctx) {
+static bool perf_init(timing_context_t *ctx) {
   struct perf_event_attr pea;
   memset(&pea, 0, sizeof(pea));
 
-  pea.size           = sizeof(pea);
-  pea.type           = PERF_TYPE_HARDWARE;
-  pea.config         = PERF_COUNT_HW_CPU_CYCLES;
-  pea.disabled       = 0;
+  pea.size = sizeof(pea);
+  pea.type = PERF_TYPE_HARDWARE;
+  pea.config = PERF_COUNT_HW_CPU_CYCLES;
+  pea.disabled = 0;
   pea.exclude_kernel = 1;
-  pea.exclude_hv     = 1;
+  pea.exclude_hv = 1;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
   pea.exclude_callchain_kernel = 1;
-  pea.exclude_callchain_user   = 1;
+  pea.exclude_callchain_user = 1;
 #endif
 
   const int fd = perf_event_open(&pea, 0, -1, -1, 0);
@@ -186,29 +183,27 @@ static bool perf_init(timing_context_t* ctx) {
     return false;
   }
 
-  ctx->read    = perf_read;
-  ctx->close   = perf_close;
+  ctx->read = perf_read;
+  ctx->close = perf_close;
   ctx->data.fd = fd;
   return true;
 }
 #endif
 
-static void clock_close(timing_context_t* ctx) {
-  (void)ctx;
-}
+static void clock_close(timing_context_t *ctx) { (void)ctx; }
 
-static uint64_t clock_read(timing_context_t* ctx) {
+static uint64_t clock_read(timing_context_t *ctx) {
   (void)ctx;
   return clock() * (1000000 / CLOCKS_PER_SEC);
 }
 
-static bool clock_init(timing_context_t* ctx) {
-  ctx->read  = clock_read;
+static bool clock_init(timing_context_t *ctx) {
+  ctx->read = clock_read;
   ctx->close = clock_close;
   return true;
 }
 
-bool timing_init(timing_context_t* ctx) {
+bool timing_init(timing_context_t *ctx) {
 #if defined(__linux__) && defined(__aarch64__)
   if (armv8_init(ctx)) {
     return true;

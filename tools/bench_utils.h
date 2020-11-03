@@ -13,7 +13,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "../banquet.h"
+#include "../banquet_instances.h"
 
 typedef struct {
   banquet_params_t params;

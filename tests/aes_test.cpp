@@ -33,10 +33,11 @@ TEST_CASE("AES-128 normal is equal to sbox-saving", "[aes]") {
   aes_block_t ct2;
 
   REQUIRE(aes_128(key, plaintext, ct) == true);
-  std::vector<std::pair<uint8_t, uint8_t>> sbox_states =
+  std::pair<std::vector<uint8_t>, std::vector<uint8_t>> sbox_states =
       aes_128_with_sbox_output(key, plaintext, ct2);
   REQUIRE(ct == ciphertext_expected);
   REQUIRE(ct == ct2);
-  REQUIRE(sbox_states.size() == NUM_SBOXES_AES_128);
+  REQUIRE(sbox_states.first.size() == NUM_SBOXES_AES_128);
+  REQUIRE(sbox_states.second.size() == NUM_SBOXES_AES_128);
   // TODO hardcode values for this KAT
 }

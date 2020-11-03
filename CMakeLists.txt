@@ -31,11 +31,11 @@ set(BANQUET_SRCS
   )
 
 add_library(banquet_static STATIC ${BANQUET_SRCS})
-target_link_libraries(banquet_static PUBLIC keccak ${NTL_LIBRARY} ${GMP_LIBRARIES} Threads::Threads)
+target_link_libraries(banquet_static PUBLIC keccak ${NTL_LIBRARY}  ${GMP_LIBRARIES} Threads::Threads)
 
-#add_library(bench_utils STATIC tools/bench_utils.c tools/bench_timing.c)
-#add_executable(bench tools/bench.c)
-#target_link_libraries(bench picnic bench_utils)
+add_library(bench_utils STATIC tools/bench_utils.cpp tools/bench_timing.cpp)
+add_executable(bench tools/bench.cpp)
+target_link_libraries(bench banquet_static bench_utils)
 
 if(BUILD_TESTS)
 find_package(Catch2 REQUIRED)
