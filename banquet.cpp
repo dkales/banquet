@@ -354,6 +354,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
 
     // sanity check, mpc execution = plain one
     aes_block_t ct_check;
+    memset(ct_check.data(), 0, ct_check.size());
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       std::transform(std::begin(ct_shares[party]), std::end(ct_shares[party]),
                      std::begin(ct_check), std::begin(ct_check),
@@ -598,6 +599,14 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         a[repetition],
         b[repetition],
     };
+    // sanity check c = sum_j a*b
+    // GF2E accum;
+    // clear(accum);
+    // for (size_t j = 0; j < instance.m1; j++) {
+    //   accum += a[repetition][j] * b[repetition][j];
+    // }
+    // if (accum != c[repetition])
+    //   throw std::runtime_error("something wrong here");
     proofs.push_back(proof);
   }
 
@@ -632,16 +641,32 @@ bool banquet_verify(const banquet_instance_t &instance,
   digest_t h_2 =
       phase_2_commitment(instance, signature.salt, signature.h_1, P_deltas);
 
+  // compute challenges based on hashes
+  // h1 expansion
+  std::vector<std::vector<GF2E>> r_ejs =
+      phase_1_expand(instance, signature.h_1);
+  // h2 expansion
+  vec_GF2E forbidden_challenge_values =
+      utils::get_first_n_field_elements(instance.m2);
+  std::vector<GF2E> R_es =
+      phase_2_expand(instance, h_2, forbidden_challenge_values);
+  // h3 expansion already happened in deserialize to get missing parties
+  std::vector<uint8_t> missing_parties =
+      phase_3_expand(instance, signature.h_3);
+
   // rebuild SeedTrees
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     const banquet_repetition_proof_t &proof = signature.proofs[repetition];
     // regenerate generate seed tree for the N parties (except the missing one)
+    if (missing_parties[repetition] != proof.reveallist.second)
+      throw std::runtime_error(
+          "modified signature between deserialization and verify");
     seed_trees.emplace_back(proof.reveallist, instance.num_MPC_parties,
                             signature.salt, repetition);
     // commit to each party's seed, fill up missing one with data from proof
     std::vector<digest_t> current_party_seed_commitments;
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      if (party != proof.reveallist.second) {
+      if (party != missing_parties[repetition]) {
         current_party_seed_commitments.push_back(
             commit_to_party_seed(seed_trees[repetition].get_leaf(party).value(),
                                  signature.salt, repetition, party));
@@ -655,7 +680,7 @@ bool banquet_verify(const banquet_instance_t &instance,
     std::vector<RandomTape> party_tapes;
     party_tapes.reserve(instance.num_MPC_parties);
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      if (party != proof.reveallist.second) {
+      if (party != missing_parties[repetition]) {
         party_tapes.emplace_back(seed_trees[repetition].get_leaf(party).value(),
                                  signature.salt, repetition, party);
       } else {
@@ -707,9 +732,10 @@ bool banquet_verify(const banquet_instance_t &instance,
         aes_128_s_shares(shared_key, shared_t, pt, ct_shares);
 
     // get missing output broadcast from proof
-    ct_shares[proof.reveallist.second] = proof.output_broadcast;
+    ct_shares[missing_parties[repetition]] = proof.output_broadcast;
     // sanity check, mpc execution = plain one
     aes_block_t ct_check;
+    memset(ct_check.data(), 0, ct_check.size());
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       std::transform(std::begin(ct_shares[party]), std::end(ct_shares[party]),
                      std::begin(ct_check), std::begin(ct_check),
@@ -725,6 +751,124 @@ bool banquet_verify(const banquet_instance_t &instance,
   }
 
   /////////////////////////////////////////////////////////////////////////////
+  // recompute shares of polynomials
+  /////////////////////////////////////////////////////////////////////////////
+  // a vector of the first m2+1 field elements for interpolation
+  vec_GF2E x_values_for_interpolation_zero_to_m2 =
+      utils::get_first_n_field_elements(instance.m2 + 1);
+  std::vector<GF2EX> precomputation_for_zero_to_m2 =
+      utils::precompute_lagrange_polynomials(
+          x_values_for_interpolation_zero_to_m2);
+  vec_GF2E x_values_for_interpolation_zero_to_2m2 =
+      utils::get_first_n_field_elements(2 * instance.m2 + 1);
+  std::vector<GF2EX> precomputation_for_zero_to_2m2 =
+      utils::precompute_lagrange_polynomials(
+          x_values_for_interpolation_zero_to_2m2);
+
+  std::vector<std::vector<std::vector<GF2EX>>> S_eji(instance.num_rounds);
+  std::vector<std::vector<std::vector<GF2EX>>> T_eji(instance.num_rounds);
+  std::vector<GF2EX> P_e(instance.num_rounds);
+  std::vector<std::vector<GF2EX>> P_ei(instance.num_rounds);
+
+  for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    const banquet_repetition_proof_t &proof = signature.proofs[repetition];
+    S_eji[repetition].resize(instance.num_MPC_parties);
+    T_eji[repetition].resize(instance.num_MPC_parties);
+    P_ei[repetition].resize(instance.num_MPC_parties);
+    P_deltas[repetition].resize(instance.m2 + 1);
+
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      if (party != missing_parties[repetition]) {
+        S_eji[repetition][party].resize(instance.m1);
+        T_eji[repetition][party].resize(instance.m1);
+        // lift shares from F_{2^8} to F_{2^{8\lambda}}
+        std::vector<GF2E> lifted_s;
+        std::vector<GF2E> lifted_t;
+        lifted_s.reserve(NUM_SBOXES_AES_128);
+        lifted_t.reserve(NUM_SBOXES_AES_128);
+        for (size_t idx = 0; idx < NUM_SBOXES_AES_128; idx++) {
+          lifted_s.push_back(
+              utils::lift_uint8_t(rep_shared_s[repetition][party][idx]));
+          lifted_t.push_back(
+              utils::lift_uint8_t(rep_shared_t[repetition][party][idx]));
+        }
+        std::vector<vec_GF2E> s_bar(instance.m1);
+        std::vector<vec_GF2E> t_bar(instance.m1);
+
+        for (size_t j = 0; j < instance.m1; j++) {
+          // rearrange shares
+          s_bar[j].SetLength(instance.m2 + 1);
+          t_bar[j].SetLength(instance.m2 + 1);
+          for (size_t k = 0; k < instance.m2; k++) {
+            s_bar[j][k] = r_ejs[repetition][j] * lifted_s[j + instance.m1 * k];
+            t_bar[j][k] = lifted_t[j + instance.m1 * k];
+          }
+
+          // sample additional random points
+          std::vector<uint8_t> s_ej_bar(instance.lambda);
+          random_tapes[repetition][party].squeeze_bytes(s_ej_bar.data(),
+                                                        s_ej_bar.size());
+
+          std::vector<uint8_t> t_ej_bar(instance.lambda);
+          random_tapes[repetition][party].squeeze_bytes(t_ej_bar.data(),
+                                                        t_ej_bar.size());
+          s_bar[j][instance.m2] = utils::GF2E_from_bytes(s_ej_bar);
+          t_bar[j][instance.m2] = utils::GF2E_from_bytes(t_ej_bar);
+
+          // interpolate polynomials S_ej^i and T_ej^i
+          S_eji[repetition][party][j] = utils::interpolate_with_precomputation(
+              precomputation_for_zero_to_m2, s_bar[j]);
+          T_eji[repetition][party][j] = utils::interpolate_with_precomputation(
+              precomputation_for_zero_to_m2, t_bar[j]);
+        }
+      }
+    }
+
+    // compute sharing of P
+    std::vector<vec_GF2E> P_shares(instance.num_MPC_parties);
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      if (party != missing_parties[repetition]) {
+        // first m2 points: first party = sum of r_e,j, other parties = 0
+        P_shares[party].SetLength(2 * instance.m2 + 1);
+        if (party == 0) {
+          GF2E sum_r;
+          for (size_t j = 0; j < instance.m1; j++) {
+            sum_r += r_ejs[repetition][j];
+          }
+          for (size_t k = 0; k < instance.m2; k++) {
+            P_shares[party][k] = sum_r;
+          }
+        } else {
+          for (size_t k = 0; k < instance.m2; k++) {
+            P_shares[party][k] = GF2E::zero();
+          }
+        }
+
+        // second m2+1 points: sample from random tape
+        for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
+          std::vector<uint8_t> P_k_share(instance.lambda);
+          random_tapes[repetition][party].squeeze_bytes(P_k_share.data(),
+                                                        P_k_share.size());
+          P_shares[party][k] = utils::GF2E_from_bytes(P_k_share);
+        }
+      }
+    }
+    if (0 != missing_parties[repetition]) {
+      for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
+        // adjust first share with delta from signature
+        P_shares[0][k] += proof.P_delta[k - instance.m2];
+      }
+    }
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      // iterpolate polynomial P_e^1 from 2m+1 points
+      if (party != missing_parties[repetition]) {
+        P_ei[repetition][party] = utils::interpolate_with_precomputation(
+            precomputation_for_zero_to_2m2, P_shares[party]);
+      }
+    }
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
   // recompute views of polynomial checks
   /////////////////////////////////////////////////////////////////////////////
   std::vector<GF2E> c(instance.num_rounds);
@@ -733,6 +877,54 @@ bool banquet_verify(const banquet_instance_t &instance,
   std::vector<std::vector<std::vector<GF2E>>> a_shares(instance.num_rounds);
   std::vector<std::vector<GF2E>> b(instance.num_rounds);
   std::vector<std::vector<std::vector<GF2E>>> b_shares(instance.num_rounds);
+
+  for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    const banquet_repetition_proof_t &proof = signature.proofs[repetition];
+    size_t missing_party = missing_parties[repetition];
+
+    c_shares[repetition].resize(instance.num_MPC_parties);
+    a[repetition].resize(instance.m1);
+    b[repetition].resize(instance.m1);
+    a_shares[repetition].resize(instance.num_MPC_parties);
+    b_shares[repetition].resize(instance.num_MPC_parties);
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      a_shares[repetition][party].resize(instance.m1);
+      b_shares[repetition][party].resize(instance.m1);
+      if (party != missing_party) {
+        for (size_t j = 0; j < instance.m1; j++) {
+          // compute a_ej^i and b_ej^i
+          a_shares[repetition][party][j] =
+              eval(S_eji[repetition][party][j], R_es[repetition]);
+          b_shares[repetition][party][j] =
+              eval(T_eji[repetition][party][j], R_es[repetition]);
+        }
+        // compute c_e^i
+        c_shares[repetition][party] =
+            eval(P_ei[repetition][party], R_es[repetition]);
+      }
+    }
+
+    // calculate missing shares
+    c[repetition] = proof.P_at_R;
+    c_shares[repetition][missing_party] = proof.P_at_R;
+    for (size_t j = 0; j < instance.m1; j++) {
+      a[repetition][j] = proof.S_j_at_R[j];
+      a_shares[repetition][missing_party][j] = proof.S_j_at_R[j];
+      b[repetition][j] = proof.T_j_at_R[j];
+      b_shares[repetition][missing_party][j] = proof.T_j_at_R[j];
+    }
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      if (party != missing_party) {
+        c_shares[repetition][missing_party] -= c_shares[repetition][party];
+        for (size_t j = 0; j < instance.m1; j++) {
+          a_shares[repetition][missing_party][j] -=
+              a_shares[repetition][party][j];
+          b_shares[repetition][missing_party][j] -=
+              b_shares[repetition][party][j];
+        }
+      }
+    }
+  }
   /////////////////////////////////////////////////////////////////////////////
   // recompute h_1 and h_3
   /////////////////////////////////////////////////////////////////////////////
@@ -759,6 +951,7 @@ bool banquet_verify(const banquet_instance_t &instance,
   // check if P_e(R) = Sum_j S_e_j(R) * T_e_j(R) for all e
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     GF2E accum;
+    clear(accum);
     for (size_t j = 0; j < instance.m1; j++) {
       accum += signature.proofs[repetition].S_j_at_R[j] *
                signature.proofs[repetition].T_j_at_R[j];

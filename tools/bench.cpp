@@ -25,9 +25,10 @@ struct timing_and_size_t {
 };
 
 static void print_timings(const std::vector<timing_and_size_t> &timings) {
+  printf("keygen,sign,verify,size,serialize,deserialize\n");
   for (const auto &timing : timings) {
-    printf("%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "%" PRIu64
-           "\n",
+    printf("%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64
+           ",%" PRIu64 "\n",
            timing.keygen, timing.sign, timing.verify, timing.size,
            timing.serialize, timing.deserialize);
   }
@@ -70,8 +71,17 @@ static void bench_sign_and_verify(const bench_options_t *options) {
     timing.size = serialized.size();
 
     start_time = timing_read(&ctx);
+    banquet_signature_t deserialized =
+        banquet_deserialize_signature(instance, serialized);
+    tmp_time = timing_read(&ctx);
+    timing.deserialize = tmp_time - start_time;
+    start_time = timing_read(&ctx);
+    bool ok =
+        banquet_verify(instance, keypair.second, deserialized, m, sizeof(m));
     tmp_time = timing_read(&ctx);
     timing.verify = tmp_time - start_time;
+    if (!ok)
+      std::cerr << "failed to verify signature" << std::endl;
   }
 
   timing_close(&ctx);
