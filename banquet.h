@@ -18,3 +18,6 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
 std::vector<uint8_t>
 banquet_serialize_signature(const banquet_instance_t &instance,
                             const banquet_signature_t &signature);
+banquet_signature_t
+banquet_deserialize_signature(const banquet_instance_t &instance,
+                              const std::vector<uint8_t> &signature);

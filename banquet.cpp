@@ -370,8 +370,14 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   // a vector of the first m2+1 field elements for interpolation
   vec_GF2E x_values_for_interpolation_zero_to_m2 =
       utils::get_first_n_field_elements(instance.m2 + 1);
+  std::vector<GF2EX> precomputation_for_zero_to_m2 =
+      utils::precompute_lagrange_polynomials(
+          x_values_for_interpolation_zero_to_m2);
   vec_GF2E x_values_for_interpolation_zero_to_2m2 =
       utils::get_first_n_field_elements(2 * instance.m2 + 1);
+  std::vector<GF2EX> precomputation_for_zero_to_2m2 =
+      utils::precompute_lagrange_polynomials(
+          x_values_for_interpolation_zero_to_2m2);
 
   std::vector<std::vector<std::vector<GF2EX>>> S_eji(instance.num_rounds);
   std::vector<std::vector<std::vector<GF2EX>>> T_eji(instance.num_rounds);
@@ -423,10 +429,10 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         t_bar[j][instance.m2] = utils::GF2E_from_bytes(t_ej_bar);
 
         // interpolate polynomials S_ej^i and T_ej^i
-        S_eji[repetition][party][j] =
-            interpolate(x_values_for_interpolation_zero_to_m2, s_bar[j]);
-        T_eji[repetition][party][j] =
-            interpolate(x_values_for_interpolation_zero_to_m2, t_bar[j]);
+        S_eji[repetition][party][j] = utils::interpolate_with_precomputation(
+            precomputation_for_zero_to_m2, s_bar[j]);
+        T_eji[repetition][party][j] = utils::interpolate_with_precomputation(
+            precomputation_for_zero_to_m2, t_bar[j]);
       }
     }
 
@@ -485,8 +491,8 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     }
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       // iterpolate polynomial P_e^1 from 2m+1 points
-      P_ei[repetition][party] =
-          interpolate(x_values_for_interpolation_zero_to_2m2, P_shares[party]);
+      P_ei[repetition][party] = utils::interpolate_with_precomputation(
+          precomputation_for_zero_to_2m2, P_shares[party]);
     }
   }
 
@@ -625,4 +631,83 @@ banquet_serialize_signature(const banquet_instance_t &instance,
     }
   }
   return serialized;
+}
+banquet_signature_t
+banquet_deserialize_signature(const banquet_instance_t &instance,
+                              const std::vector<uint8_t> &serialized) {
+
+  size_t current_offset = 0;
+  banquet_salt_t salt;
+  memcpy(salt.data(), serialized.data() + current_offset, salt.size());
+  current_offset += salt.size();
+  digest_t h_1, h_2, h_3;
+  memcpy(h_1.data(), serialized.data() + current_offset, h_1.size());
+  current_offset += h_1.size();
+  memcpy(h_2.data(), serialized.data() + current_offset, h_2.size());
+  current_offset += h_2.size();
+  memcpy(h_3.data(), serialized.data() + current_offset, h_3.size());
+  current_offset += h_3.size();
+  std::vector<banquet_repetition_proof_t> proofs;
+
+  std::vector<uint8_t> missing_parties = phase_3_expand(instance, h_3);
+  size_t reveallist_size = ceil_log2(instance.num_MPC_parties);
+  for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    reveal_list_t reveallist;
+    reveallist.first.reserve(reveallist_size);
+    reveallist.second = missing_parties[repetition];
+    for (size_t i = 0; i < reveallist_size; i++) {
+      seed_t seed;
+      memcpy(seed.data(), serialized.data() + current_offset, seed.size());
+      current_offset += seed.size();
+      reveallist.first.push_back(seed);
+    }
+    digest_t C_e;
+    memcpy(C_e.data(), serialized.data() + current_offset, C_e.size());
+    current_offset += C_e.size();
+    aes_block_t sk_delta;
+    memcpy(sk_delta.data(), serialized.data() + current_offset,
+           sk_delta.size());
+    current_offset += sk_delta.size();
+    std::vector<uint8_t> t_delta(NUM_SBOXES_AES_128);
+    memcpy(t_delta.data(), serialized.data() + current_offset, t_delta.size());
+    current_offset += t_delta.size();
+
+    std::vector<GF2E> P_delta;
+    P_delta.reserve(instance.m2 + 1);
+    for (size_t k = 0; k < instance.m2 + 1; k++) {
+      std::vector<uint8_t> buffer(instance.lambda);
+      memcpy(buffer.data(), serialized.data() + current_offset, buffer.size());
+      current_offset += buffer.size();
+      P_delta.push_back(utils::GF2E_from_bytes(buffer));
+    }
+    GF2E P_at_R;
+    {
+      std::vector<uint8_t> buffer(instance.lambda);
+      memcpy(buffer.data(), serialized.data() + current_offset, buffer.size());
+      current_offset += buffer.size();
+      P_at_R = utils::GF2E_from_bytes(buffer);
+    }
+    std::vector<GF2E> S_j_at_R;
+    S_j_at_R.reserve(instance.m1);
+    for (size_t j = 0; j < instance.m1; j++) {
+      std::vector<uint8_t> buffer(instance.lambda);
+      memcpy(buffer.data(), serialized.data() + current_offset, buffer.size());
+      current_offset += buffer.size();
+      S_j_at_R.push_back(utils::GF2E_from_bytes(buffer));
+    }
+    std::vector<GF2E> T_j_at_R;
+    T_j_at_R.reserve(instance.m1);
+    for (size_t j = 0; j < instance.m1; j++) {
+      std::vector<uint8_t> buffer(instance.lambda);
+      memcpy(buffer.data(), serialized.data() + current_offset, buffer.size());
+      current_offset += buffer.size();
+      T_j_at_R.push_back(utils::GF2E_from_bytes(buffer));
+    }
+    proofs.emplace_back(banquet_repetition_proof_t{reveallist, C_e, sk_delta,
+                                                   t_delta, P_delta, P_at_R,
+                                                   S_j_at_R, T_j_at_R});
+  }
+  assert(current_offset == serialized.size());
+  banquet_signature_t signature{salt, h_1, h_2, h_3, proofs};
+  return signature;
 }

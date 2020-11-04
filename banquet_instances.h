@@ -17,7 +17,16 @@
 enum banquet_params_t {
   PARAMETER_SET_INVALID = 0,
   Banquet_L1_Param1 = 1,
-  PARAMETER_SET_MAX_INDEX = 2
+  Banquet_L1_Param2 = 2,
+  Banquet_L1_Param3 = 3,
+  Banquet_L1_Param4 = 4,
+  Banquet_L1_Param5 = 5,
+  Banquet_L1_Param6 = 6,
+  Banquet_L1_Param7 = 7,
+  Banquet_L1_Param8 = 8,
+  Banquet_L1_Param9 = 9,
+  Banquet_L1_Param10 = 10,
+  PARAMETER_SET_MAX_INDEX = 11
 };
 
 struct banquet_instance_t {

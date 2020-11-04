@@ -1,9 +1,12 @@
 
-_.<X> = GF(2)[]
+R.<X> = GF(2)[]
 K.<x> = GF(2^8, modulus= X^8 +X^4+X^3+X+1)
 
 
-F = GF(2^32, 'y', modulus = X^32 + X^22 + X^2 + X^1 + 1)
+F = GF(2^32, 'y', modulus = X^32 + X^7 + X^3 + X^2 + 1)
+#F = GF(2^40, 'y', modulus = X^40 + X^5 + X^4 + X^3 + 1)
+#F = GF(2^48, 'y', modulus = X^48 + X^5 + X^3 + X^2 + 1)
+
 print(F, F.modulus())
 print(F.gens())
 H = Hom(K, F)
