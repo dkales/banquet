@@ -15,6 +15,11 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
                                  const banquet_keypair_t &keypair,
                                  const uint8_t *message, size_t message_len);
 
+bool banquet_verify(const banquet_instance_t &instance,
+                    const banquet_publickey_t &pk,
+                    const banquet_signature_t &signature,
+                    const uint8_t *message, size_t message_len);
+
 std::vector<uint8_t>
 banquet_serialize_signature(const banquet_instance_t &instance,
                             const banquet_signature_t &signature);

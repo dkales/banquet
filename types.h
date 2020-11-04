@@ -45,6 +45,7 @@ struct banquet_repetition_proof_t {
   digest_t C_e;
   aes_block_t sk_delta;
   std::vector<uint8_t> t_delta;
+  aes_block_t output_broadcast;
   std::vector<GF2E> P_delta;
   GF2E P_at_R;
   std::vector<GF2E> S_j_at_R;

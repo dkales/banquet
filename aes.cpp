@@ -302,7 +302,8 @@ static unsigned char bytesub_restore(unsigned char t, int is_first_party) {
 std::vector<std::vector<uint8_t>>
 aes_128_s_shares(const std::vector<aes_block_t> &key_in,
                  const std::vector<std::vector<uint8_t>> &t_shares,
-                 const aes_block_t &plaintext_in, aes_block_t &ciphertext_out) {
+                 const aes_block_t &plaintext_in,
+                 std::vector<aes_block_t> &ciphertext_out) {
 
   typedef uint8_t expanded_key_t[4][44];
   typedef uint8_t state_t[4][4];
@@ -396,12 +397,13 @@ aes_128_s_shares(const std::vector<aes_block_t> &key_in,
         }
   }
 
-  memset(ciphertext_out.data(), 0, ciphertext_out.size());
-  for (j = 0; j < 4; ++j)
-    for (i = 0; i < 4; ++i)
-      for (party = 0; party < num_parties; party++) {
-        ciphertext_out[j * 4 + i] ^= state[party][i][j];
-      }
+  aes_block_t ct_share;
+  for (party = 0; party < num_parties; party++) {
+    for (j = 0; j < 4; ++j)
+      for (i = 0; i < 4; ++i)
+        ct_share[j * 4 + i] = state[party][i][j];
+    ciphertext_out.push_back(ct_share);
+  }
 
   return s_shares;
 }

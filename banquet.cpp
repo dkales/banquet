@@ -68,26 +68,30 @@ digest_t commit_to_party_seed(const seed_t &seed, const banquet_salt_t &salt,
   return commitment;
 }
 
-digest_t
-phase_1_commitment(const banquet_instance_t &instance,
-                   const banquet_salt_t &salt,
-                   const std::vector<std::vector<digest_t>> &commitments,
-                   const std::vector<aes_block_t> &key_deltas,
-                   const std::vector<std::vector<uint8_t>> &t_deltas) {
+digest_t phase_1_commitment(
+    const banquet_instance_t &instance, const banquet_salt_t &salt,
+    const banquet_publickey_t &pk, const uint8_t *message, size_t message_len,
+    const std::vector<std::vector<digest_t>> &commitments,
+    const std::vector<aes_block_t> &key_deltas,
+    const std::vector<std::vector<uint8_t>> &t_deltas,
+    const std::vector<std::vector<aes_block_t>> &output_broadcasts) {
 
   hash_context ctx;
   hash_init_prefix(&ctx, DIGEST_SIZE, HASH_PREFIX_1);
   hash_update(&ctx, salt.data(), salt.size());
+  hash_update(&ctx, pk.data(), pk.size());
+  hash_update(&ctx, message, message_len);
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       hash_update(&ctx, commitments[repetition][party].data(),
                   commitments[repetition][party].size());
-      hash_update(&ctx, key_deltas[repetition].data(),
-                  key_deltas[repetition].size());
-      hash_update(&ctx, t_deltas[repetition].data(),
-                  t_deltas[repetition].size());
+      hash_update(&ctx, output_broadcasts[repetition][party].data(),
+                  output_broadcasts[repetition][party].size());
     }
+    hash_update(&ctx, key_deltas[repetition].data(),
+                key_deltas[repetition].size());
+    hash_update(&ctx, t_deltas[repetition].data(), t_deltas[repetition].size());
   }
   hash_final(&ctx);
 
@@ -300,6 +304,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   /////////////////////////////////////////////////////////////////////////////
   std::vector<std::vector<aes_block_t>> rep_shared_keys;
   std::vector<aes_block_t> rep_key_deltas;
+  std::vector<std::vector<aes_block_t>> rep_output_broadcasts;
   std::vector<std::vector<std::vector<uint8_t>>> rep_shared_s;
   std::vector<std::vector<std::vector<uint8_t>>> rep_shared_t;
   std::vector<std::vector<uint8_t>> rep_t_deltas;
@@ -343,12 +348,21 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     rep_t_deltas.push_back(t_deltas);
 
     // get shares of sbox inputs by executing MPC AES
-    aes_block_t ct_check;
+    std::vector<aes_block_t> ct_shares;
     std::vector<std::vector<uint8_t>> shared_s =
-        aes_128_s_shares(shared_key, shared_t, pt, ct_check);
+        aes_128_s_shares(shared_key, shared_t, pt, ct_shares);
+
     // sanity check, mpc execution = plain one
+    aes_block_t ct_check;
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      std::transform(std::begin(ct_shares[party]), std::end(ct_shares[party]),
+                     std::begin(ct_check), std::begin(ct_check),
+                     std::bit_xor<uint8_t>());
+    }
+
     assert(ct == ct_check);
     rep_shared_s.push_back(shared_s);
+    rep_output_broadcasts.push_back(ct_shares);
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -357,8 +371,10 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
 
   // commit to salt, (all commitments of parties seeds, key_delta, t_delta)
   // for all repetitions
-  digest_t h_1 = phase_1_commitment(instance, salt, party_seed_commitments,
-                                    rep_key_deltas, rep_t_deltas);
+  digest_t h_1 =
+      phase_1_commitment(instance, salt, keypair.second, message, message_len,
+                         party_seed_commitments, rep_key_deltas, rep_t_deltas,
+                         rep_output_broadcasts);
 
   // expand challenge hash to M * m1 values
   std::vector<std::vector<GF2E>> r_ejs = phase_1_expand(instance, h_1);
@@ -576,6 +592,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         party_seed_commitments[repetition][missing_party],
         rep_key_deltas[repetition],
         rep_t_deltas[repetition],
+        rep_output_broadcasts[repetition][missing_party],
         P_deltas[repetition],
         c[repetition],
         a[repetition],
@@ -587,6 +604,169 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   banquet_signature_t signature{salt, h_1, h_2, h_3, proofs};
 
   return signature;
+}
+
+bool banquet_verify(const banquet_instance_t &instance,
+                    const banquet_publickey_t &pk,
+                    const banquet_signature_t &signature,
+                    const uint8_t *message, size_t message_len) {
+
+  // init modulus of extension field F_{2^{8\lambda}}
+  utils::init_extension_field(instance);
+
+  aes_block_t pt, ct;
+  memcpy(pt.data(), pk.data(), pt.size());
+  memcpy(ct.data(), pk.data() + pt.size(), ct.size());
+
+  // do parallel repetitions
+  // create seed trees and random tapes
+  std::vector<SeedTree> seed_trees;
+  std::vector<std::vector<RandomTape>> random_tapes;
+  std::vector<std::vector<digest_t>> party_seed_commitments;
+
+  // recompute h_2
+  std::vector<std::vector<GF2E>> P_deltas;
+  for (const banquet_repetition_proof_t &proof : signature.proofs) {
+    P_deltas.push_back(proof.P_delta);
+  }
+  digest_t h_2 =
+      phase_2_commitment(instance, signature.salt, signature.h_1, P_deltas);
+
+  // rebuild SeedTrees
+  for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    const banquet_repetition_proof_t &proof = signature.proofs[repetition];
+    // regenerate generate seed tree for the N parties (except the missing one)
+    seed_trees.emplace_back(proof.reveallist, instance.num_MPC_parties,
+                            signature.salt, repetition);
+    // commit to each party's seed, fill up missing one with data from proof
+    std::vector<digest_t> current_party_seed_commitments;
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      if (party != proof.reveallist.second) {
+        current_party_seed_commitments.push_back(
+            commit_to_party_seed(seed_trees[repetition].get_leaf(party).value(),
+                                 signature.salt, repetition, party));
+      } else {
+        current_party_seed_commitments.push_back(proof.C_e);
+      }
+    }
+    party_seed_commitments.push_back(current_party_seed_commitments);
+
+    // create random tape for each party, dummy one for missing party
+    std::vector<RandomTape> party_tapes;
+    party_tapes.reserve(instance.num_MPC_parties);
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      if (party != proof.reveallist.second) {
+        party_tapes.emplace_back(seed_trees[repetition].get_leaf(party).value(),
+                                 signature.salt, repetition, party);
+      } else {
+        party_tapes.emplace_back(seed_t{}, signature.salt, repetition, party);
+      }
+    }
+    random_tapes.push_back(party_tapes);
+  }
+  /////////////////////////////////////////////////////////////////////////////
+  // recompute commitments to executions of AES
+  /////////////////////////////////////////////////////////////////////////////
+  std::vector<std::vector<aes_block_t>> rep_shared_keys;
+  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_s;
+  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_t;
+  std::vector<std::vector<aes_block_t>> rep_output_broadcasts;
+
+  for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    const banquet_repetition_proof_t &proof = signature.proofs[repetition];
+
+    // generate sharing of secret key
+    std::vector<aes_block_t> shared_key(instance.num_MPC_parties);
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      random_tapes[repetition][party].squeeze_bytes(shared_key[party].data(),
+                                                    shared_key[party].size());
+    }
+
+    // fix first share
+    std::transform(std::begin(proof.sk_delta), std::end(proof.sk_delta),
+                   std::begin(shared_key[0]), std::begin(shared_key[0]),
+                   std::bit_xor<uint8_t>());
+
+    rep_shared_keys.push_back(shared_key);
+    // generate sharing of t values
+    std::vector<std::vector<uint8_t>> shared_t(instance.num_MPC_parties);
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      shared_t[party].resize(NUM_SBOXES_AES_128);
+      random_tapes[repetition][party].squeeze_bytes(shared_t[party].data(),
+                                                    shared_t[party].size());
+    }
+    // fix first share
+    std::transform(std::begin(proof.t_delta), std::end(proof.t_delta),
+                   std::begin(shared_t[0]), std::begin(shared_t[0]),
+                   std::bit_xor<uint8_t>());
+    rep_shared_t.push_back(shared_t);
+
+    // get shares of sbox inputs by executing MPC AES
+    std::vector<aes_block_t> ct_shares;
+    std::vector<std::vector<uint8_t>> shared_s =
+        aes_128_s_shares(shared_key, shared_t, pt, ct_shares);
+
+    // get missing output broadcast from proof
+    ct_shares[proof.reveallist.second] = proof.output_broadcast;
+    // sanity check, mpc execution = plain one
+    aes_block_t ct_check;
+    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
+      std::transform(std::begin(ct_shares[party]), std::end(ct_shares[party]),
+                     std::begin(ct_check), std::begin(ct_check),
+                     std::bit_xor<uint8_t>());
+    }
+    // check MPC execution is correct
+    if (memcmp(ct_check.data(), ct.data(), ct.size()) != 0) {
+      return false;
+    }
+
+    rep_shared_s.push_back(shared_s);
+    rep_output_broadcasts.push_back(ct_shares);
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // recompute views of polynomial checks
+  /////////////////////////////////////////////////////////////////////////////
+  std::vector<GF2E> c(instance.num_rounds);
+  std::vector<std::vector<GF2E>> c_shares(instance.num_rounds);
+  std::vector<std::vector<GF2E>> a(instance.num_rounds);
+  std::vector<std::vector<std::vector<GF2E>>> a_shares(instance.num_rounds);
+  std::vector<std::vector<GF2E>> b(instance.num_rounds);
+  std::vector<std::vector<std::vector<GF2E>>> b_shares(instance.num_rounds);
+  /////////////////////////////////////////////////////////////////////////////
+  // recompute h_1 and h_3
+  /////////////////////////////////////////////////////////////////////////////
+  std::vector<aes_block_t> sk_deltas;
+  std::vector<std::vector<uint8_t>> t_deltas;
+  for (const banquet_repetition_proof_t &proof : signature.proofs) {
+    sk_deltas.push_back(proof.sk_delta);
+    t_deltas.push_back(proof.t_delta);
+  }
+  digest_t h_1 = phase_1_commitment(instance, signature.salt, pk, message,
+                                    message_len, party_seed_commitments,
+                                    sk_deltas, t_deltas, rep_output_broadcasts);
+
+  digest_t h_3 = phase_3_commitment(instance, signature.salt, h_2, c, c_shares,
+                                    a, a_shares, b, b_shares);
+  // do checks
+  if (memcmp(h_1.data(), signature.h_1.data(), h_1.size()) != 0)
+    return false;
+  if (memcmp(h_2.data(), signature.h_2.data(), h_2.size()) != 0)
+    return false;
+  if (memcmp(h_3.data(), signature.h_3.data(), h_3.size()) != 0)
+    return false;
+
+  // check if P_e(R) = Sum_j S_e_j(R) * T_e_j(R) for all e
+  for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    GF2E accum;
+    for (size_t j = 0; j < instance.m1; j++) {
+      accum += signature.proofs[repetition].S_j_at_R[j] *
+               signature.proofs[repetition].T_j_at_R[j];
+    }
+    if (accum != signature.proofs[repetition].P_at_R)
+      return false;
+  }
+  return true;
 }
 
 std::vector<uint8_t>
@@ -613,6 +793,8 @@ banquet_serialize_signature(const banquet_instance_t &instance,
                       proof.sk_delta.end());
     serialized.insert(serialized.end(), proof.t_delta.begin(),
                       proof.t_delta.end());
+    serialized.insert(serialized.end(), proof.output_broadcast.begin(),
+                      proof.output_broadcast.end());
     for (size_t k = 0; k < instance.m2 + 1; k++) {
       std::vector<uint8_t> buffer = GF2E_to_bytes(instance, proof.P_delta[k]);
       serialized.insert(serialized.end(), buffer.begin(), buffer.end());
@@ -664,13 +846,20 @@ banquet_deserialize_signature(const banquet_instance_t &instance,
     digest_t C_e;
     memcpy(C_e.data(), serialized.data() + current_offset, C_e.size());
     current_offset += C_e.size();
+
     aes_block_t sk_delta;
     memcpy(sk_delta.data(), serialized.data() + current_offset,
            sk_delta.size());
     current_offset += sk_delta.size();
+
     std::vector<uint8_t> t_delta(NUM_SBOXES_AES_128);
     memcpy(t_delta.data(), serialized.data() + current_offset, t_delta.size());
     current_offset += t_delta.size();
+
+    aes_block_t output_broadcast;
+    memcpy(output_broadcast.data(), serialized.data() + current_offset,
+           output_broadcast.size());
+    current_offset += output_broadcast.size();
 
     std::vector<GF2E> P_delta;
     P_delta.reserve(instance.m2 + 1);
@@ -703,9 +892,9 @@ banquet_deserialize_signature(const banquet_instance_t &instance,
       current_offset += buffer.size();
       T_j_at_R.push_back(utils::GF2E_from_bytes(buffer));
     }
-    proofs.emplace_back(banquet_repetition_proof_t{reveallist, C_e, sk_delta,
-                                                   t_delta, P_delta, P_at_R,
-                                                   S_j_at_R, T_j_at_R});
+    proofs.emplace_back(banquet_repetition_proof_t{
+        reveallist, C_e, sk_delta, t_delta, output_broadcast, P_delta, P_at_R,
+        S_j_at_R, T_j_at_R});
   }
   assert(current_offset == serialized.size());
   banquet_signature_t signature{salt, h_1, h_2, h_3, proofs};
