@@ -13,5 +13,3 @@ H = Hom(K, F)
 morph = H.list()[0]
 g = morph.im_gens()[0]
 print(morph)
-#a = K.random_element()
-#print(g^7 + g^5+g^3+1 == morph(a))
