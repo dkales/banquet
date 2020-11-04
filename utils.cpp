@@ -9,7 +9,7 @@ using namespace NTL;
 namespace utils {
 
 static GF2X modulus;
-static GF2X generator;
+static std::array<GF2E, 8> generator_powers;
 
 void init_extension_field(const banquet_instance_t &instance) {
   switch (instance.lambda) {
@@ -26,23 +26,27 @@ void init_extension_field(const banquet_instance_t &instance) {
     //   To:   Finite Field in y of size 2^32
     //   Defn: x |--> y^30 + y^23 + y^21 + y^18 + y^14 + y^13 + y^11 + y^9 + y^7
     //   + y^6 + y^5 + y^4 + y^3 + y
-    clear(generator);
-    SetCoeff(generator, 30);
-    SetCoeff(generator, 23);
-    SetCoeff(generator, 21);
-    SetCoeff(generator, 18);
-    SetCoeff(generator, 14);
-    SetCoeff(generator, 13);
-    SetCoeff(generator, 11);
-    SetCoeff(generator, 9);
-    SetCoeff(generator, 7);
-    SetCoeff(generator, 6);
-    SetCoeff(generator, 5);
-    SetCoeff(generator, 4);
-    SetCoeff(generator, 3);
-    SetCoeff(generator, 1);
+    GF2X gen;
+    clear(gen);
+    SetCoeff(gen, 30);
+    SetCoeff(gen, 23);
+    SetCoeff(gen, 21);
+    SetCoeff(gen, 18);
+    SetCoeff(gen, 14);
+    SetCoeff(gen, 13);
+    SetCoeff(gen, 11);
+    SetCoeff(gen, 9);
+    SetCoeff(gen, 7);
+    SetCoeff(gen, 6);
+    SetCoeff(gen, 5);
+    SetCoeff(gen, 4);
+    SetCoeff(gen, 3);
+    SetCoeff(gen, 1);
 
     GF2E::init(modulus);
+    set(generator_powers[0]);
+    for (size_t i = 1; i < 8; i++)
+      generator_powers[i] = generator_powers[i - 1] * conv<GF2E>(gen);
   } break;
   case 5: {
     // modulus = x^40 + x^5 + x^4 + x^3 + 1
@@ -57,22 +61,26 @@ void init_extension_field(const banquet_instance_t &instance) {
     //   To:   Finite Field in y of size 2^40
     //   Defn: x |--> y^31 + y^30 + y^27 + y^25 + y^22 + y^21 + y^20 + y^18 +
     //   y^15 + y^9 + y^6 + y^4 + y^2
-    clear(generator);
-    SetCoeff(generator, 31);
-    SetCoeff(generator, 30);
-    SetCoeff(generator, 27);
-    SetCoeff(generator, 25);
-    SetCoeff(generator, 22);
-    SetCoeff(generator, 21);
-    SetCoeff(generator, 20);
-    SetCoeff(generator, 18);
-    SetCoeff(generator, 15);
-    SetCoeff(generator, 9);
-    SetCoeff(generator, 6);
-    SetCoeff(generator, 4);
-    SetCoeff(generator, 2);
+    GF2X gen;
+    clear(gen);
+    SetCoeff(gen, 31);
+    SetCoeff(gen, 30);
+    SetCoeff(gen, 27);
+    SetCoeff(gen, 25);
+    SetCoeff(gen, 22);
+    SetCoeff(gen, 21);
+    SetCoeff(gen, 20);
+    SetCoeff(gen, 18);
+    SetCoeff(gen, 15);
+    SetCoeff(gen, 9);
+    SetCoeff(gen, 6);
+    SetCoeff(gen, 4);
+    SetCoeff(gen, 2);
 
     GF2E::init(modulus);
+    set(generator_powers[0]);
+    for (size_t i = 1; i < 8; i++)
+      generator_powers[i] = generator_powers[i - 1] * conv<GF2E>(gen);
   } break;
   case 6: {
     // modulus = x^48 + x^5 + x^3 + x^2 + 1
@@ -88,33 +96,37 @@ void init_extension_field(const banquet_instance_t &instance) {
     //   Defn: x |--> y^45 + y^43 + y^40 + y^37 + y^36 + y^35 + y^34 + y^33 +
     //   y^31 + y^30 + y^29 + y^28 + y^24 + y^21 + y^20 + y^19 + y^16 + y^14 +
     //   y^13 + y^11 + y^10 + y^7 + y^3 + y^2
-    clear(generator);
-    SetCoeff(generator, 45);
-    SetCoeff(generator, 43);
-    SetCoeff(generator, 40);
-    SetCoeff(generator, 37);
-    SetCoeff(generator, 36);
-    SetCoeff(generator, 35);
-    SetCoeff(generator, 34);
-    SetCoeff(generator, 33);
-    SetCoeff(generator, 31);
-    SetCoeff(generator, 30);
-    SetCoeff(generator, 29);
-    SetCoeff(generator, 28);
-    SetCoeff(generator, 24);
-    SetCoeff(generator, 21);
-    SetCoeff(generator, 20);
-    SetCoeff(generator, 19);
-    SetCoeff(generator, 16);
-    SetCoeff(generator, 14);
-    SetCoeff(generator, 13);
-    SetCoeff(generator, 11);
-    SetCoeff(generator, 10);
-    SetCoeff(generator, 7);
-    SetCoeff(generator, 3);
-    SetCoeff(generator, 2);
+    GF2X gen;
+    clear(gen);
+    SetCoeff(gen, 45);
+    SetCoeff(gen, 43);
+    SetCoeff(gen, 40);
+    SetCoeff(gen, 37);
+    SetCoeff(gen, 36);
+    SetCoeff(gen, 35);
+    SetCoeff(gen, 34);
+    SetCoeff(gen, 33);
+    SetCoeff(gen, 31);
+    SetCoeff(gen, 30);
+    SetCoeff(gen, 29);
+    SetCoeff(gen, 28);
+    SetCoeff(gen, 24);
+    SetCoeff(gen, 21);
+    SetCoeff(gen, 20);
+    SetCoeff(gen, 19);
+    SetCoeff(gen, 16);
+    SetCoeff(gen, 14);
+    SetCoeff(gen, 13);
+    SetCoeff(gen, 11);
+    SetCoeff(gen, 10);
+    SetCoeff(gen, 7);
+    SetCoeff(gen, 3);
+    SetCoeff(gen, 2);
 
     GF2E::init(modulus);
+    set(generator_powers[0]);
+    for (size_t i = 1; i < 8; i++)
+      generator_powers[i] = generator_powers[i - 1] * conv<GF2E>(gen);
   } break;
   default:
     throw std::runtime_error(
@@ -123,10 +135,12 @@ void init_extension_field(const banquet_instance_t &instance) {
 }
 
 GF2E lift_uint8_t(uint8_t value) {
-
-  GF2X result = GF2XFromBytes(&value, sizeof(uint8_t));
-  result *= generator;
-  return conv<GF2E>(result);
+  GF2E result;
+  for (size_t bit = 0; bit < 8; bit++) {
+    GF2 value_bit = conv<GF2>((value >> bit) & 1);
+    result += value_bit * generator_powers[bit];
+  }
+  return result;
 }
 
 GF2E GF2E_from_bytes(const std::vector<uint8_t> &value) {
