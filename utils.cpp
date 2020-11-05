@@ -143,7 +143,7 @@ void init_extension_field(const banquet_instance_t &instance) {
   }
 }
 
-GF2E lift_uint8_t(uint8_t value) { return lifting_lut[value]; }
+const GF2E &lift_uint8_t(uint8_t value) { return lifting_lut[value]; }
 
 GF2E GF2E_from_bytes(const std::vector<uint8_t> &value) {
   GF2X res = GF2XFromBytes(value.data(), value.size());

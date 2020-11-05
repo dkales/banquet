@@ -418,8 +418,8 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       // S_eji[repetition][party].resize(instance.m1);
       // T_eji[repetition][party].resize(instance.m1);
       // lift shares from F_{2^8} to F_{2^{8\lambda}}
-      std::vector<GF2E> lifted_s;
-      std::vector<GF2E> lifted_t;
+      std::vector<std::reference_wrapper<const GF2E>> lifted_s;
+      std::vector<std::reference_wrapper<const GF2E>> lifted_t;
       lifted_s.reserve(NUM_SBOXES_AES_128);
       lifted_t.reserve(NUM_SBOXES_AES_128);
       for (size_t idx = 0; idx < NUM_SBOXES_AES_128; idx++) {
@@ -819,8 +819,8 @@ bool banquet_verify(const banquet_instance_t &instance,
         s_prime[repetition][party].resize(instance.m1);
         t_prime[repetition][party].resize(instance.m1);
         // lift shares from F_{2^8} to F_{2^{8\lambda}}
-        std::vector<GF2E> lifted_s;
-        std::vector<GF2E> lifted_t;
+        std::vector<std::reference_wrapper<const GF2E>> lifted_s;
+        std::vector<std::reference_wrapper<const GF2E>> lifted_t;
         lifted_s.reserve(NUM_SBOXES_AES_128);
         lifted_t.reserve(NUM_SBOXES_AES_128);
         for (size_t idx = 0; idx < NUM_SBOXES_AES_128; idx++) {
