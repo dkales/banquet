@@ -9,7 +9,22 @@ using namespace NTL;
 namespace utils {
 
 static GF2X modulus;
-static std::array<GF2E, 8> generator_powers;
+static std::array<GF2E, 256> lifting_lut;
+
+static void init_lifting_lut(const GF2E &generator) {
+  clear(lifting_lut[0]); // lut(0) = 0
+  set(lifting_lut[1]);   // lut(1) = 1
+
+  GF2E pow = generator;
+  for (size_t bit = 1; bit < 8; bit++) {
+    size_t start = (1ULL << bit);
+    // copy last half of LUT and add current generator power
+    for (size_t idx = 0; idx < start; idx++) {
+      lifting_lut[start + idx] = lifting_lut[idx] + pow;
+    }
+    pow = pow * generator;
+  }
+}
 
 void init_extension_field(const banquet_instance_t &instance) {
   switch (instance.lambda) {
@@ -44,9 +59,7 @@ void init_extension_field(const banquet_instance_t &instance) {
     SetCoeff(gen, 1);
 
     GF2E::init(modulus);
-    set(generator_powers[0]);
-    for (size_t i = 1; i < 8; i++)
-      generator_powers[i] = generator_powers[i - 1] * conv<GF2E>(gen);
+    init_lifting_lut(conv<GF2E>(gen));
   } break;
   case 5: {
     // modulus = x^40 + x^5 + x^4 + x^3 + 1
@@ -78,9 +91,7 @@ void init_extension_field(const banquet_instance_t &instance) {
     SetCoeff(gen, 2);
 
     GF2E::init(modulus);
-    set(generator_powers[0]);
-    for (size_t i = 1; i < 8; i++)
-      generator_powers[i] = generator_powers[i - 1] * conv<GF2E>(gen);
+    init_lifting_lut(conv<GF2E>(gen));
   } break;
   case 6: {
     // modulus = x^48 + x^5 + x^3 + x^2 + 1
@@ -124,9 +135,7 @@ void init_extension_field(const banquet_instance_t &instance) {
     SetCoeff(gen, 2);
 
     GF2E::init(modulus);
-    set(generator_powers[0]);
-    for (size_t i = 1; i < 8; i++)
-      generator_powers[i] = generator_powers[i - 1] * conv<GF2E>(gen);
+    init_lifting_lut(conv<GF2E>(gen));
   } break;
   default:
     throw std::runtime_error(
@@ -134,35 +143,7 @@ void init_extension_field(const banquet_instance_t &instance) {
   }
 }
 
-#if 0
-std::vector<GF2E> g_precomputed_lifts(256);
-GF2E lift_uint8_t(uint8_t value) {
-  GF2E result;
-
-    if(g_precomputed_lifts[value] != 0) {
-        return g_precomputed_lifts[value];
-    }
-
-  for (size_t bit = 0; bit < 8; bit++) {
-    GF2 value_bit = conv<GF2>((value >> bit) & 1);
-    result += value_bit * generator_powers[bit];
-  }
-
-  g_precomputed_lifts[value] = result;
-  return result;
-}
-#else
-GF2E lift_uint8_t(uint8_t value) {
-  GF2E result;
-
-  for (size_t bit = 0; bit < 8; bit++) {
-    GF2 value_bit = conv<GF2>((value >> bit) & 1);
-    result += value_bit * generator_powers[bit];
-  }
-
-  return result;
-}
-#endif
+GF2E lift_uint8_t(uint8_t value) { return lifting_lut[value]; }
 
 GF2E GF2E_from_bytes(const std::vector<uint8_t> &value) {
   GF2X res = GF2XFromBytes(value.data(), value.size());
