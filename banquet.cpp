@@ -433,12 +433,13 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
             utils::lift_uint8_t(rep_shared_t[repetition][party][idx]));
       }
 
+      // rearrange shares
+      vec_GF2E s_bar;
+      vec_GF2E t_bar;
+      s_bar.SetLength(instance.m2 + 1);
+      t_bar.SetLength(instance.m2 + 1);
+
       for (size_t j = 0; j < instance.m1; j++) {
-        vec_GF2E s_bar;
-        vec_GF2E t_bar;
-        // rearrange shares
-        s_bar.SetLength(instance.m2 + 1);
-        t_bar.SetLength(instance.m2 + 1);
         for (size_t k = 0; k < instance.m2; k++) {
           s_bar[k] = r_ejs[repetition][j] * lifted_s[j + instance.m1 * k];
           t_bar[k] = lifted_t[j + instance.m1 * k];
@@ -775,7 +776,7 @@ bool banquet_verify(const banquet_instance_t &instance,
 
     // get missing output broadcast from proof
     ct_shares[missing_parties[repetition]] = proof.output_broadcast;
-    // sanity check, mpc execution = plain one
+    // check MPC execution is correct
     aes_block_t ct_check;
     memset(ct_check.data(), 0, ct_check.size());
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
@@ -783,7 +784,6 @@ bool banquet_verify(const banquet_instance_t &instance,
                      std::begin(ct_check), std::begin(ct_check),
                      std::bit_xor<uint8_t>());
     }
-    // check MPC execution is correct
     if (memcmp(ct_check.data(), ct.data(), ct.size()) != 0) {
       return false;
     }
@@ -841,12 +841,14 @@ bool banquet_verify(const banquet_instance_t &instance,
           lifted_t.push_back(
               utils::lift_uint8_t(rep_shared_t[repetition][party][idx]));
         }
+
+        // rearrange shares
+        vec_GF2E s_bar;
+        vec_GF2E t_bar;
+        s_bar.SetLength(instance.m2 + 1);
+        t_bar.SetLength(instance.m2 + 1);
+
         for (size_t j = 0; j < instance.m1; j++) {
-          vec_GF2E s_bar;
-          vec_GF2E t_bar;
-          // rearrange shares
-          s_bar.SetLength(instance.m2 + 1);
-          t_bar.SetLength(instance.m2 + 1);
           for (size_t k = 0; k < instance.m2; k++) {
             s_bar[k] = r_ejs[repetition][j] * lifted_s[j + instance.m1 * k];
             t_bar[k] = lifted_t[j + instance.m1 * k];
