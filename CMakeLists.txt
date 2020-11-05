@@ -38,7 +38,16 @@ add_executable(bench tools/bench.cpp)
 target_link_libraries(bench banquet_static bench_utils)
 
 if(BUILD_TESTS)
-find_package(Catch2 REQUIRED)
+Include(FetchContent)
+
+FetchContent_Declare(
+  Catch2
+  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG        v2.13.1)
+
+FetchContent_MakeAvailable(Catch2)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${Catch2_SOURCE_DIR}/contrib/")
+
 add_executable(aes_test tests/aes_test.cpp)
 add_executable(tree_test tests/tree_test.cpp)
 add_executable(banquet_test tests/banquet_test.cpp)
