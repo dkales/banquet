@@ -269,6 +269,9 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   auto [salt, master_seeds] =
       generate_salt_and_seeds(instance, keypair, message, message_len);
 
+  // buffer for squeezing field elements into
+  std::vector<uint8_t> lambda_sized_buffer(instance.lambda);
+
   // do parallel repetitions
   // create seed trees and random tapes
   std::vector<SeedTree> seed_trees;
@@ -441,15 +444,13 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         }
 
         // sample additional random points
-        std::vector<uint8_t> s_ej_bar(instance.lambda);
-        random_tapes[repetition][party].squeeze_bytes(s_ej_bar.data(),
-                                                      s_ej_bar.size());
+        random_tapes[repetition][party].squeeze_bytes(
+            lambda_sized_buffer.data(), lambda_sized_buffer.size());
+        s_bar[instance.m2] = utils::GF2E_from_bytes(lambda_sized_buffer);
 
-        std::vector<uint8_t> t_ej_bar(instance.lambda);
-        random_tapes[repetition][party].squeeze_bytes(t_ej_bar.data(),
-                                                      t_ej_bar.size());
-        s_bar[instance.m2] = utils::GF2E_from_bytes(s_ej_bar);
-        t_bar[instance.m2] = utils::GF2E_from_bytes(t_ej_bar);
+        random_tapes[repetition][party].squeeze_bytes(
+            lambda_sized_buffer.data(), lambda_sized_buffer.size());
+        t_bar[instance.m2] = utils::GF2E_from_bytes(lambda_sized_buffer);
 
         // interpolate polynomials S_ej^i and T_ej^i
         // S_eji[repetition][party][j] = utils::interpolate_with_precomputation(
@@ -457,8 +458,8 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         // T_eji[repetition][party][j] =
         // utils::interpolate_with_precomputation(
         // precomputation_for_zero_to_m2, t_bar);
-        s_prime[repetition][party][j] = s_bar;
-        t_prime[repetition][party][j] = t_bar;
+        s_prime[repetition][party][j] = std::move(s_bar);
+        t_prime[repetition][party][j] = std::move(t_bar);
       }
     }
 
@@ -508,10 +509,9 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
 
       // second m2+1 points: sample from random tape
       for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
-        std::vector<uint8_t> P_k_share(instance.lambda);
-        random_tapes[repetition][party].squeeze_bytes(P_k_share.data(),
-                                                      P_k_share.size());
-        P_shares[party][k] = utils::GF2E_from_bytes(P_k_share);
+        random_tapes[repetition][party].squeeze_bytes(
+            lambda_sized_buffer.data(), lambda_sized_buffer.size());
+        P_shares[party][k] = utils::GF2E_from_bytes(lambda_sized_buffer);
       }
     }
     for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
@@ -656,6 +656,9 @@ bool banquet_verify(const banquet_instance_t &instance,
   aes_block_t pt, ct;
   memcpy(pt.data(), pk.data(), pt.size());
   memcpy(ct.data(), pk.data() + pt.size(), ct.size());
+
+  // buffer for squeezing field elements into
+  std::vector<uint8_t> lambda_sized_buffer(instance.lambda);
 
   // do parallel repetitions
   // create seed trees and random tapes
@@ -841,15 +844,13 @@ bool banquet_verify(const banquet_instance_t &instance,
           }
 
           // sample additional random points
-          std::vector<uint8_t> s_ej_bar(instance.lambda);
-          random_tapes[repetition][party].squeeze_bytes(s_ej_bar.data(),
-                                                        s_ej_bar.size());
+          random_tapes[repetition][party].squeeze_bytes(
+              lambda_sized_buffer.data(), lambda_sized_buffer.size());
+          s_bar[instance.m2] = utils::GF2E_from_bytes(lambda_sized_buffer);
 
-          std::vector<uint8_t> t_ej_bar(instance.lambda);
-          random_tapes[repetition][party].squeeze_bytes(t_ej_bar.data(),
-                                                        t_ej_bar.size());
-          s_bar[instance.m2] = utils::GF2E_from_bytes(s_ej_bar);
-          t_bar[instance.m2] = utils::GF2E_from_bytes(t_ej_bar);
+          random_tapes[repetition][party].squeeze_bytes(
+              lambda_sized_buffer.data(), lambda_sized_buffer.size());
+          t_bar[instance.m2] = utils::GF2E_from_bytes(lambda_sized_buffer);
 
           // interpolate polynomials S_ej^i and T_ej^i
           // S_eji[repetition][party][j] =
@@ -858,8 +859,8 @@ bool banquet_verify(const banquet_instance_t &instance,
           // T_eji[repetition][party][j] =
           // utils::interpolate_with_precomputation(
           // precomputation_for_zero_to_m2, t_bar);
-          s_prime[repetition][party][j] = s_bar;
-          t_prime[repetition][party][j] = t_bar;
+          s_prime[repetition][party][j] = std::move(s_bar);
+          t_prime[repetition][party][j] = std::move(t_bar);
         }
       }
     }
@@ -886,10 +887,9 @@ bool banquet_verify(const banquet_instance_t &instance,
 
         // second m2+1 points: sample from random tape
         for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
-          std::vector<uint8_t> P_k_share(instance.lambda);
-          random_tapes[repetition][party].squeeze_bytes(P_k_share.data(),
-                                                        P_k_share.size());
-          P_shares[party][k] = utils::GF2E_from_bytes(P_k_share);
+          random_tapes[repetition][party].squeeze_bytes(
+              lambda_sized_buffer.data(), lambda_sized_buffer.size());
+          P_shares[party][k] = utils::GF2E_from_bytes(lambda_sized_buffer);
         }
       }
     }
