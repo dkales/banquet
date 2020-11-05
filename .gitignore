@@ -1,6 +1,9 @@
 build/
 .vscode/
 
+# compiled sage code
+*.sage.py
+
 # Prerequisites
 *.d
 
