@@ -134,14 +134,35 @@ void init_extension_field(const banquet_instance_t &instance) {
   }
 }
 
+#if 0
+std::vector<GF2E> g_precomputed_lifts(256);
 GF2E lift_uint8_t(uint8_t value) {
   GF2E result;
+
+    if(g_precomputed_lifts[value] != 0) {
+        return g_precomputed_lifts[value];
+    }
+
   for (size_t bit = 0; bit < 8; bit++) {
     GF2 value_bit = conv<GF2>((value >> bit) & 1);
     result += value_bit * generator_powers[bit];
   }
+
+  g_precomputed_lifts[value] = result;
   return result;
 }
+#else
+GF2E lift_uint8_t(uint8_t value) {
+  GF2E result;
+
+  for (size_t bit = 0; bit < 8; bit++) {
+    GF2 value_bit = conv<GF2>((value >> bit) & 1);
+    result += value_bit * generator_powers[bit];
+  }
+
+  return result;
+}
+#endif
 
 GF2E GF2E_from_bytes(const std::vector<uint8_t> &value) {
   GF2X res = GF2XFromBytes(value.data(), value.size());
