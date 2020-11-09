@@ -166,21 +166,14 @@ std::vector<GF2EX> precompute_lagrange_polynomials(const vec_GF2E &x_values) {
   std::vector<GF2EX> precomputed_lagrange_polynomials;
   precomputed_lagrange_polynomials.reserve(m);
 
-  GF2E denom;
   GF2EX full_poly = BuildFromRoots(x_values);
   GF2EX lagrange_poly;
   GF2EX missing_term;
   SetX(missing_term);
   for (size_t k = 0; k < m; k++) {
-    set(denom); // denom = 1
-    for (size_t t = 0; t < m; t++) {
-      if (t != k) {
-        denom *= (x_values[k] - x_values[t]);
-      }
-    }
     SetCoeff(missing_term, 0, -x_values[k]);
     lagrange_poly = full_poly / missing_term;
-    lagrange_poly = lagrange_poly / denom;
+    lagrange_poly = lagrange_poly / eval(lagrange_poly, x_values[k]);
     precomputed_lagrange_polynomials.push_back(lagrange_poly);
   }
 
