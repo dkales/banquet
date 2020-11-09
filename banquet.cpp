@@ -460,8 +460,8 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         // T_eji[repetition][party][j] =
         // utils::interpolate_with_precomputation(
         // precomputation_for_zero_to_m2, t_bar);
-        s_prime[repetition][party][j] = std::move(s_bar);
-        t_prime[repetition][party][j] = std::move(t_bar);
+        s_prime[repetition][party][j] = s_bar;
+        t_prime[repetition][party][j] = t_bar;
       }
     }
 
@@ -870,8 +870,8 @@ bool banquet_verify(const banquet_instance_t &instance,
           // T_eji[repetition][party][j] =
           // utils::interpolate_with_precomputation(
           // precomputation_for_zero_to_m2, t_bar);
-          s_prime[repetition][party][j] = std::move(s_bar);
-          t_prime[repetition][party][j] = std::move(t_bar);
+          s_prime[repetition][party][j] = s_bar;
+          t_prime[repetition][party][j] = t_bar;
         }
       }
     }

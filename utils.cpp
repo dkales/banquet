@@ -146,8 +146,12 @@ void init_extension_field(const banquet_instance_t &instance) {
 const GF2E &lift_uint8_t(uint8_t value) { return lifting_lut[value]; }
 
 GF2E GF2E_from_bytes(const std::vector<uint8_t> &value) {
-  GF2X res = GF2XFromBytes(value.data(), value.size());
-  return conv<GF2E>(res);
+  // assumes value is already smaller than current modulus
+  GF2X inner = GF2XFromBytes(value.data(), value.size());
+  // GF2E result(INIT_NO_ALLOC);
+  // result.LoopHole() = inner;
+  // return result;
+  return conv<GF2E>(inner);
 }
 
 vec_GF2E get_first_n_field_elements(size_t n) {
