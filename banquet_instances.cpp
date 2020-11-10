@@ -29,7 +29,7 @@ static const banquet_instance_t instances[PARAMETER_SET_MAX_INDEX] = {
         PARAMETER_SET_INVALID,
     },
     /* AES_params, digest size, seed size, T, N, m1, m2, lambda */
-    {AES128_PARAMS, 32, 16, 31, 64, 10, 20, 4, Banquet_L1_Param1},
+    {AES128_PARAMS, 32, 16, 31, 64, 5, 40, 4, Banquet_L1_Param1},
     {AES128_PARAMS, 32, 16, 31, 64, 20, 10, 4, Banquet_L1_Param2},
     {AES128_PARAMS, 32, 16, 29, 64, 10, 20, 5, Banquet_L1_Param3},
     {AES128_PARAMS, 32, 16, 27, 64, 10, 20, 6, Banquet_L1_Param4},
@@ -40,7 +40,9 @@ static const banquet_instance_t instances[PARAMETER_SET_MAX_INDEX] = {
     {AES128_PARAMS, 32, 16, 23, 256, 10, 20, 5, Banquet_L1_Param9},
     {AES128_PARAMS, 32, 16, 21, 256, 10, 20, 6, Banquet_L1_Param10},
     {AES192_PARAMS, 48, 24, 38, 64, 16, 26, 4, Banquet_L3_Param1},
+    {AES192_PARAMS, 48, 24, 38, 64, 26, 16, 4, Banquet_L3_Param2},
     {AES256_PARAMS, 64, 32, 50, 64, 20, 25, 4, Banquet_L5_Param1},
+    {AES256_PARAMS, 64, 32, 50, 64, 25, 20, 4, Banquet_L5_Param2},
 };
 
 const banquet_instance_t &banquet_instance_get(banquet_params_t param) {
