@@ -244,9 +244,20 @@ banquet_keypair_t banquet_keygen(const banquet_instance_t &instance) {
   while (true) {
     rand_bytes(key.data(), key.size());
     rand_bytes(pt.data(), pt.size());
-    if (AES128::aes_128(key, pt, ct)) {
-      break;
-    }
+    if (instance.aes_params.key_size == 16) {
+      if (AES128::aes_128(key, pt, ct)) {
+        break;
+      }
+    } else if (instance.aes_params.key_size == 24) {
+      if (AES192::aes_192(key, pt, ct)) {
+        break;
+      }
+    } else if (instance.aes_params.key_size == 32) {
+      if (AES256::aes_256(key, pt, ct)) {
+        break;
+      }
+    } else
+      throw std::runtime_error("invalid parameters");
   }
   banquet_keypair_t keypair;
   keypair.first = key;
@@ -272,8 +283,16 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   memcpy(ct.data(), keypair.second.data() + pt.size(), ct.size());
 
   // get sbox inputs and outputs for aes evaluation
-  std::pair<std::vector<uint8_t>, std::vector<uint8_t>> sbox_pairs =
-      AES128::aes_128_with_sbox_output(key, pt, ct2);
+  std::pair<std::vector<uint8_t>, std::vector<uint8_t>> sbox_pairs;
+
+  if (instance.aes_params.key_size == 16)
+    sbox_pairs = AES128::aes_128_with_sbox_output(key, pt, ct2);
+  else if (instance.aes_params.key_size == 24)
+    sbox_pairs = AES192::aes_192_with_sbox_output(key, pt, ct2);
+  else if (instance.aes_params.key_size == 32)
+    sbox_pairs = AES256::aes_256_with_sbox_output(key, pt, ct2);
+  else
+    throw std::runtime_error("invalid parameters");
   // sanity check, incoming keypair is valid
   assert(ct == ct2);
 
@@ -359,13 +378,19 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     std::transform(std::begin(t_deltas), std::end(t_deltas),
                    std::begin(shared_t[0]), std::begin(shared_t[0]),
                    std::bit_xor<uint8_t>());
-    rep_shared_t.push_back(shared_t);
-    rep_t_deltas.push_back(t_deltas);
 
     // get shares of sbox inputs by executing MPC AES
     std::vector<std::vector<uint8_t>> ct_shares;
-    std::vector<std::vector<uint8_t>> shared_s =
-        AES128::aes_128_s_shares(shared_key, shared_t, pt, ct_shares);
+    std::vector<std::vector<uint8_t>> shared_s;
+
+    if (instance.aes_params.key_size == 16)
+      shared_s = AES128::aes_128_s_shares(shared_key, shared_t, pt, ct_shares);
+    else if (instance.aes_params.key_size == 24)
+      shared_s = AES192::aes_192_s_shares(shared_key, shared_t, pt, ct_shares);
+    else if (instance.aes_params.key_size == 32)
+      shared_s = AES256::aes_256_s_shares(shared_key, shared_t, pt, ct_shares);
+    else
+      throw std::runtime_error("invalid parameters");
 
     // sanity check, mpc execution = plain one
     std::vector<uint8_t> ct_check(instance.aes_params.block_size *
@@ -380,6 +405,8 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     assert(ct == ct_check);
     rep_shared_s.push_back(shared_s);
     rep_output_broadcasts.push_back(ct_shares);
+    rep_shared_t.push_back(shared_t);
+    rep_t_deltas.push_back(t_deltas);
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -437,9 +464,9 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       // lift shares from F_{2^8} to F_{2^{8\lambda}}
       std::vector<std::reference_wrapper<const GF2E>> lifted_s;
       std::vector<std::reference_wrapper<const GF2E>> lifted_t;
-      lifted_s.reserve(AES128::NUM_SBOXES);
-      lifted_t.reserve(AES128::NUM_SBOXES);
-      for (size_t idx = 0; idx < AES128::NUM_SBOXES; idx++) {
+      lifted_s.reserve(instance.aes_params.num_sboxes);
+      lifted_t.reserve(instance.aes_params.num_sboxes);
+      for (size_t idx = 0; idx < instance.aes_params.num_sboxes; idx++) {
         lifted_s.push_back(
             utils::lift_uint8_t(rep_shared_s[repetition][party][idx]));
         lifted_t.push_back(
@@ -751,6 +778,7 @@ bool banquet_verify(const banquet_instance_t &instance,
   /////////////////////////////////////////////////////////////////////////////
   // recompute commitments to executions of AES
   /////////////////////////////////////////////////////////////////////////////
+  // TODO allocate once for all reps, make nice interface
   std::vector<std::vector<std::vector<uint8_t>>> rep_shared_keys;
   std::vector<std::vector<std::vector<uint8_t>>> rep_shared_s;
   std::vector<std::vector<std::vector<uint8_t>>> rep_shared_t;
@@ -788,13 +816,22 @@ bool banquet_verify(const banquet_instance_t &instance,
 
     // get shares of sbox inputs by executing MPC AES
     std::vector<std::vector<uint8_t>> ct_shares;
-    std::vector<std::vector<uint8_t>> shared_s =
-        AES128::aes_128_s_shares(shared_key, shared_t, pt, ct_shares);
+    std::vector<std::vector<uint8_t>> shared_s;
+
+    if (instance.aes_params.key_size == 16)
+      shared_s = AES128::aes_128_s_shares(shared_key, shared_t, pt, ct_shares);
+    else if (instance.aes_params.key_size == 24)
+      shared_s = AES192::aes_192_s_shares(shared_key, shared_t, pt, ct_shares);
+    else if (instance.aes_params.key_size == 32)
+      shared_s = AES256::aes_256_s_shares(shared_key, shared_t, pt, ct_shares);
+    else
+      throw std::runtime_error("invalid parameters");
 
     // get missing output broadcast from proof
     ct_shares[missing_parties[repetition]] = proof.output_broadcast;
     // check MPC execution is correct
-    aes_block_t ct_check;
+    std::vector<uint8_t> ct_check(instance.aes_params.block_size *
+                                  instance.aes_params.num_blocks);
     memset(ct_check.data(), 0, ct_check.size());
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       std::transform(std::begin(ct_shares[party]), std::end(ct_shares[party]),
@@ -850,9 +887,9 @@ bool banquet_verify(const banquet_instance_t &instance,
         // lift shares from F_{2^8} to F_{2^{8\lambda}}
         std::vector<std::reference_wrapper<const GF2E>> lifted_s;
         std::vector<std::reference_wrapper<const GF2E>> lifted_t;
-        lifted_s.reserve(AES128::NUM_SBOXES);
-        lifted_t.reserve(AES128::NUM_SBOXES);
-        for (size_t idx = 0; idx < AES128::NUM_SBOXES; idx++) {
+        lifted_s.reserve(instance.aes_params.num_sboxes);
+        lifted_t.reserve(instance.aes_params.num_sboxes);
+        for (size_t idx = 0; idx < instance.aes_params.num_sboxes; idx++) {
           lifted_s.push_back(
               utils::lift_uint8_t(rep_shared_s[repetition][party][idx]));
           lifted_t.push_back(
