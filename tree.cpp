@@ -11,7 +11,7 @@ static size_t get_parent(size_t node) {
   return ((node + 1) >> 1) - 1;
 }
 
-SeedTree::SeedTree(seed_t seed, const size_t num_leaves,
+SeedTree::SeedTree(std::vector<uint8_t> seed, const size_t num_leaves,
                    const banquet_salt_t &salt, const size_t rep_idx)
     : _data(), _node_exists(), _num_leaves(num_leaves) {
   size_t tree_depth = 1 + ceil_log2(num_leaves);
@@ -48,22 +48,22 @@ SeedTree::SeedTree(seed_t seed, const size_t num_leaves,
   }
 }
 
-std::pair<seed_t, seed_t> SeedTree::expandSeed(const seed_t &seed,
-                                               const banquet_salt_t &salt,
-                                               const size_t rep_idx,
-                                               const size_t node_idx) {
+std::pair<std::vector<uint8_t>, std::vector<uint8_t>>
+SeedTree::expandSeed(const std::vector<uint8_t> &seed,
+                     const banquet_salt_t &salt, const size_t rep_idx,
+                     const size_t node_idx) {
   hash_context ctx;
-  std::array<uint8_t, SEED_SIZE> ret1;
-  std::array<uint8_t, SEED_SIZE> ret2;
+  std::vector<uint8_t> ret1(seed.size());
+  std::vector<uint8_t> ret2(seed.size());
 
-  hash_init_prefix(&ctx, DIGEST_SIZE, HASH_PREFIX_1);
+  hash_init_prefix(&ctx, seed.size() * 2, HASH_PREFIX_1);
   hash_update(&ctx, seed.data(), seed.size());
   hash_update(&ctx, salt.data(), salt.size());
   hash_update_uint16_le(&ctx, rep_idx);
   hash_update_uint16_le(&ctx, node_idx);
   hash_final(&ctx);
-  hash_squeeze(&ctx, ret1.data(), SEED_SIZE);
-  hash_squeeze(&ctx, ret2.data(), SEED_SIZE);
+  hash_squeeze(&ctx, ret1.data(), seed.size());
+  hash_squeeze(&ctx, ret2.data(), seed.size());
   hash_clear(&ctx);
   return std::make_pair(ret1, ret2);
 }
@@ -148,7 +148,7 @@ SeedTree::SeedTree(const reveal_list_t &reveallist, const size_t num_leaves,
 
 reveal_list_t SeedTree::reveal_all_but(size_t leaf_idx) {
   // calculate path up to root for missing leaf
-  std::vector<seed_t> path;
+  std::vector<std::vector<uint8_t>> path;
 
   auto has_sibling = [this](size_t node) -> bool {
     if (!node_exists(node)) {
@@ -190,7 +190,7 @@ reveal_list_t SeedTree::reveal_all_but(size_t leaf_idx) {
   return std::make_pair(path, leaf_idx);
 }
 
-std::optional<seed_t> SeedTree::get_leaf(size_t leaf_idx) {
+std::optional<std::vector<uint8_t>> SeedTree::get_leaf(size_t leaf_idx) {
   assert(leaf_idx < _num_leaves);
   size_t real_leaf_idx = _num_total_nodes - _num_leaves + leaf_idx;
   return _data[real_leaf_idx];

@@ -26,19 +26,26 @@ enum banquet_params_t {
   Banquet_L1_Param8 = 8,
   Banquet_L1_Param9 = 9,
   Banquet_L1_Param10 = 10,
-  PARAMETER_SET_MAX_INDEX = 11
+  Banquet_L3_Param1 = 11,
+  Banquet_L5_Param1 = 12,
+  PARAMETER_SET_MAX_INDEX = 13
+};
+
+struct banquet_aes_t {
+  uint32_t key_size;
+  uint32_t block_size;
+  uint32_t num_blocks;
+  uint32_t num_sboxes;
 };
 
 struct banquet_instance_t {
+
+  banquet_aes_t aes_params;
 
   uint32_t digest_size;     /* bytes */
   uint32_t seed_size;       /* bytes */
   uint32_t num_rounds;      // T
   uint32_t num_MPC_parties; // N
-
-  uint32_t input_size;  /* bytes */
-  uint32_t output_size; /* bytes */
-  uint32_t view_size;   /* bytes */
 
   // m1 * m2 = m (NUM_AES_SBOXES)
   uint32_t m1;     // m1: dimension 1 of sqrt check

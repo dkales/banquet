@@ -1,7 +1,8 @@
 #include "aes.h"
 #include <cassert>
 
-static unsigned char multiply(unsigned int a, unsigned int b) {
+namespace {
+unsigned char multiply(unsigned int a, unsigned int b) {
   unsigned char result = 0;
 
   for (int i = 0; i < 8; ++i) {
@@ -15,7 +16,7 @@ static unsigned char multiply(unsigned int a, unsigned int b) {
   return result;
 }
 
-static unsigned char multiply2(unsigned int c, unsigned int d) {
+unsigned char multiply2(unsigned int c, unsigned int d) {
   unsigned char f[8];
   unsigned char g[8];
   unsigned char h[15];
@@ -47,11 +48,11 @@ static unsigned char multiply2(unsigned int c, unsigned int d) {
   return result;
 }
 
-static unsigned char square(unsigned char c) { return multiply(c, c); }
+unsigned char square(unsigned char c) { return multiply(c, c); }
 
-static unsigned char xtime(unsigned char c) { return multiply(c, 2); }
+unsigned char xtime(unsigned char c) { return multiply(c, 2); }
 
-static unsigned char bytesub(unsigned char c) {
+unsigned char bytesub(unsigned char c) {
   unsigned char c3 = multiply(square(c), c);
   unsigned char c7 = multiply(square(c3), c);
   unsigned char c63 = multiply(square(square(square(c7))), c7);
@@ -78,8 +79,7 @@ static unsigned char bytesub(unsigned char c) {
   // printf("%u->%u\n", c, result);
   return result;
 }
-static unsigned char bytesub_save(unsigned char c,
-                                  std::pair<uint8_t, uint8_t> &save) {
+unsigned char bytesub_save(unsigned char c, std::pair<uint8_t, uint8_t> &save) {
   unsigned char c3 = multiply(square(c), c);
   unsigned char c7 = multiply(square(c3), c);
   unsigned char c63 = multiply(square(square(square(c7))), c7);
@@ -108,7 +108,31 @@ static unsigned char bytesub_save(unsigned char c,
   // printf("%u->%u\n", c, result);
   return result;
 }
+static unsigned char bytesub_restore(unsigned char t, int is_first_party) {
+  unsigned char f[8];
+  unsigned char h[8];
+  unsigned char result;
+  int i;
 
+  for (i = 0; i < 8; ++i)
+    f[i] = 1 & (t >> i);
+  h[0] = f[0] ^ f[4] ^ f[5] ^ f[6] ^ f[7] ^ is_first_party;
+  h[1] = f[1] ^ f[5] ^ f[6] ^ f[7] ^ f[0] ^ is_first_party;
+  h[2] = f[2] ^ f[6] ^ f[7] ^ f[0] ^ f[1];
+  h[3] = f[3] ^ f[7] ^ f[0] ^ f[1] ^ f[2];
+  h[4] = f[4] ^ f[0] ^ f[1] ^ f[2] ^ f[3];
+  h[5] = f[5] ^ f[1] ^ f[2] ^ f[3] ^ f[4] ^ is_first_party;
+  h[6] = f[6] ^ f[2] ^ f[3] ^ f[4] ^ f[5] ^ is_first_party;
+  h[7] = f[7] ^ f[3] ^ f[4] ^ f[5] ^ f[6];
+  result = 0;
+  for (i = 0; i < 8; ++i)
+    result |= h[i] << i;
+  // printf("%u->%u\n", c, result);
+  return result;
+}
+} // namespace
+
+namespace AES128 {
 static bool aes_128_old(const uint8_t *key, const uint8_t *plaintext,
                         uint8_t *ciphertext) {
   unsigned char expanded[4][44];
@@ -258,52 +282,34 @@ static bool aes_128_save_sbox_state(
   return true;
 }
 
-bool aes_128(const aes_block_t &key_in, const aes_block_t &plaintext_in,
-             aes_block_t &ciphertext_out) {
+bool aes_128(const std::vector<uint8_t> &key_in,
+             const std::vector<uint8_t> &plaintext_in,
+             std::vector<uint8_t> &ciphertext_out) {
+  assert(key_in.size() == AES128::KEY_SIZE);
+  assert(plaintext_in.size() == AES128::BLOCK_SIZE);
+  ciphertext_out.resize(AES128::BLOCK_SIZE);
   return aes_128_old(key_in.data(), plaintext_in.data(), ciphertext_out.data());
 }
 
 std::pair<std::vector<uint8_t>, std::vector<uint8_t>>
-aes_128_with_sbox_output(const aes_block_t &key_in,
-                         const aes_block_t &plaintext_in,
-                         aes_block_t &ciphertext_out) {
+aes_128_with_sbox_output(const std::vector<uint8_t> &key_in,
+                         const std::vector<uint8_t> &plaintext_in,
+                         std::vector<uint8_t> &ciphertext_out) {
   std::pair<std::vector<uint8_t>, std::vector<uint8_t>> result;
-  result.first.reserve(NUM_SBOXES_AES_128);
-  result.second.reserve(NUM_SBOXES_AES_128);
+  result.first.reserve(AES128::NUM_SBOXES);
+  result.second.reserve(AES128::NUM_SBOXES);
+  ciphertext_out.resize(AES128::BLOCK_SIZE);
   bool ret = aes_128_save_sbox_state(key_in.data(), plaintext_in.data(),
                                      ciphertext_out.data(), result);
   assert(ret);
   return result;
 }
 
-static unsigned char bytesub_restore(unsigned char t, int is_first_party) {
-  unsigned char f[8];
-  unsigned char h[8];
-  unsigned char result;
-  int i;
-
-  for (i = 0; i < 8; ++i)
-    f[i] = 1 & (t >> i);
-  h[0] = f[0] ^ f[4] ^ f[5] ^ f[6] ^ f[7] ^ is_first_party;
-  h[1] = f[1] ^ f[5] ^ f[6] ^ f[7] ^ f[0] ^ is_first_party;
-  h[2] = f[2] ^ f[6] ^ f[7] ^ f[0] ^ f[1];
-  h[3] = f[3] ^ f[7] ^ f[0] ^ f[1] ^ f[2];
-  h[4] = f[4] ^ f[0] ^ f[1] ^ f[2] ^ f[3];
-  h[5] = f[5] ^ f[1] ^ f[2] ^ f[3] ^ f[4] ^ is_first_party;
-  h[6] = f[6] ^ f[2] ^ f[3] ^ f[4] ^ f[5] ^ is_first_party;
-  h[7] = f[7] ^ f[3] ^ f[4] ^ f[5] ^ f[6];
-  result = 0;
-  for (i = 0; i < 8; ++i)
-    result |= h[i] << i;
-  // printf("%u->%u\n", c, result);
-  return result;
-}
-
 std::vector<std::vector<uint8_t>>
-aes_128_s_shares(const std::vector<aes_block_t> &key_in,
+aes_128_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
                  const std::vector<std::vector<uint8_t>> &t_shares,
-                 const aes_block_t &plaintext_in,
-                 std::vector<aes_block_t> &ciphertext_out) {
+                 const std::vector<uint8_t> &plaintext_in,
+                 std::vector<std::vector<uint8_t>> &ciphertext_out) {
 
   typedef uint8_t expanded_key_t[4][44];
   typedef uint8_t state_t[4][4];
@@ -397,7 +403,7 @@ aes_128_s_shares(const std::vector<aes_block_t> &key_in,
         }
   }
 
-  aes_block_t ct_share;
+  std::vector<uint8_t> ct_share(AES128::BLOCK_SIZE);
   for (party = 0; party < num_parties; party++) {
     for (j = 0; j < 4; ++j)
       for (i = 0; i < 4; ++i)
@@ -407,3 +413,4 @@ aes_128_s_shares(const std::vector<aes_block_t> &key_in,
 
   return s_shares;
 }
+} // namespace AES128

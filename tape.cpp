@@ -1,8 +1,9 @@
 #include "tape.h"
 
-RandomTape::RandomTape(const seed_t &seed, const banquet_salt_t &salt,
-                       size_t rep_index, size_t party_index) {
-  hash_init(&ctx, DIGEST_SIZE);
+RandomTape::RandomTape(const std::vector<uint8_t> &seed,
+                       const banquet_salt_t &salt, size_t rep_index,
+                       size_t party_index) {
+  hash_init(&ctx, seed.size() * 2);
   hash_update(&ctx, seed.data(), seed.size());
   hash_update(&ctx, salt.data(), salt.size());
   hash_update_uint16_le(&ctx, (uint16_t)rep_index);
