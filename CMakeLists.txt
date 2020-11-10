@@ -8,7 +8,9 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Choose the type of build." FORCE)
 endif()
 
-include(CheckCCompilerFlag)
+set(CMAKE_C)
+
+include(CheckCXXCompilerFlag)
 
 set(BUILD_TESTS ON CACHE BOOL "Build unit tests.")
 
@@ -24,11 +26,31 @@ set(BANQUET_SRCS
   aes.cpp
   banquet.cpp
   banquet_instances.cpp
+  field.cpp
   tree.cpp
   tape.cpp
   utils.cpp
   randomness.c
   )
+
+set(PCLMUL_FILES field.cpp)
+CHECK_CXX_COMPILER_FLAG(-mpclmul COMPILER_HAS_M_PCLMUL)
+if (COMPILER_HAS_M_PCLMUL)
+  message(
+    STATUS
+    "compiler has flag pclmul, setting compile flag for ${PCLMUL_FILES}"
+  )
+  set_source_files_properties(
+    ${PCLMUL_FILES}
+    PROPERTIES
+    COMPILE_OPTIONS
+    -mpclmul
+  )
+else()
+  message(
+    ERROR
+    "compiler does not have flag pclmul which is needed"  )
+endif()
 
 add_library(banquet_static STATIC ${BANQUET_SRCS})
 target_link_libraries(banquet_static PUBLIC keccak ${NTL_LIBRARY}  ${GMP_LIBRARIES} Threads::Threads)
@@ -52,15 +74,18 @@ add_executable(aes_test tests/aes_test.cpp)
 add_executable(tree_test tests/tree_test.cpp)
 add_executable(banquet_test tests/banquet_test.cpp)
 add_executable(util_test tests/util_test.cpp)
+add_executable(field_test tests/field_test.cpp)
 target_link_libraries(aes_test Catch2::Catch2 banquet_static)
 target_link_libraries(tree_test Catch2::Catch2 banquet_static)
 target_link_libraries(banquet_test Catch2::Catch2 banquet_static)
 target_link_libraries(util_test Catch2::Catch2 banquet_static)
+target_link_libraries(field_test Catch2::Catch2 banquet_static)
 
 include(CTest)
 include(Catch)
 catch_discover_tests(tree_test)
 catch_discover_tests(aes_test)
 catch_discover_tests(banquet_test)
+catch_discover_tests(field_test)
 catch_discover_tests(util_test)
 endif()
