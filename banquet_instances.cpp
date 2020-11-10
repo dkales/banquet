@@ -29,7 +29,7 @@ static const banquet_instance_t instances[PARAMETER_SET_MAX_INDEX] = {
         PARAMETER_SET_INVALID,
     },
     /* AES_params, digest size, seed size, T, N, m1, m2, lambda */
-    {AES128_PARAMS, 32, 16, 31, 64, 5, 40, 4, Banquet_L1_Param1},
+    {AES128_PARAMS, 32, 16, 31, 64, 10, 20, 4, Banquet_L1_Param1},
     {AES128_PARAMS, 32, 16, 31, 64, 20, 10, 4, Banquet_L1_Param2},
     {AES128_PARAMS, 32, 16, 29, 64, 10, 20, 5, Banquet_L1_Param3},
     {AES128_PARAMS, 32, 16, 27, 64, 10, 20, 6, Banquet_L1_Param4},

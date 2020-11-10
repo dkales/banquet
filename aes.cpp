@@ -2,6 +2,9 @@
 #include <cassert>
 
 namespace {
+
+#define ROTL8(x, shift) ((uint8_t)((x) << (shift)) | ((x) >> (8 - (shift))))
+
 unsigned char multiply(unsigned int a, unsigned int b) {
   unsigned char result = 0;
 
@@ -26,25 +29,10 @@ unsigned char bytesub(unsigned char c) {
   unsigned char c63 = multiply(square(square(square(c7))), c7);
   unsigned char c127 = multiply(square(c63), c);
   unsigned char c254 = square(c127);
-  unsigned char f[8];
-  unsigned char h[8];
-  unsigned char result = c254;
-  int i;
 
-  for (i = 0; i < 8; ++i)
-    f[i] = 1 & (c254 >> i);
-  h[0] = f[0] ^ f[4] ^ f[5] ^ f[6] ^ f[7] ^ 1;
-  h[1] = f[1] ^ f[5] ^ f[6] ^ f[7] ^ f[0] ^ 1;
-  h[2] = f[2] ^ f[6] ^ f[7] ^ f[0] ^ f[1];
-  h[3] = f[3] ^ f[7] ^ f[0] ^ f[1] ^ f[2];
-  h[4] = f[4] ^ f[0] ^ f[1] ^ f[2] ^ f[3];
-  h[5] = f[5] ^ f[1] ^ f[2] ^ f[3] ^ f[4] ^ 1;
-  h[6] = f[6] ^ f[2] ^ f[3] ^ f[4] ^ f[5] ^ 1;
-  h[7] = f[7] ^ f[3] ^ f[4] ^ f[5] ^ f[6];
-  result = 0;
-  for (i = 0; i < 8; ++i)
-    result |= h[i] << i;
-  // printf("%u->%u\n", c, result);
+  unsigned char result = c254 ^ ROTL8(c254, 1) ^ ROTL8(c254, 2) ^
+                         ROTL8(c254, 3) ^ ROTL8(c254, 4) ^ 0x63;
+
   return result;
 }
 unsigned char bytesub_save(unsigned char c, std::pair<uint8_t, uint8_t> &save) {
@@ -55,48 +43,18 @@ unsigned char bytesub_save(unsigned char c, std::pair<uint8_t, uint8_t> &save) {
   unsigned char c254 = square(c127);
   unsigned char f[8];
   unsigned char h[8];
-  unsigned char result = c254;
   save.first = c;
-  save.second = result;
-  int i;
+  save.second = c254;
 
-  for (i = 0; i < 8; ++i)
-    f[i] = 1 & (c254 >> i);
-  h[0] = f[0] ^ f[4] ^ f[5] ^ f[6] ^ f[7] ^ 1;
-  h[1] = f[1] ^ f[5] ^ f[6] ^ f[7] ^ f[0] ^ 1;
-  h[2] = f[2] ^ f[6] ^ f[7] ^ f[0] ^ f[1];
-  h[3] = f[3] ^ f[7] ^ f[0] ^ f[1] ^ f[2];
-  h[4] = f[4] ^ f[0] ^ f[1] ^ f[2] ^ f[3];
-  h[5] = f[5] ^ f[1] ^ f[2] ^ f[3] ^ f[4] ^ 1;
-  h[6] = f[6] ^ f[2] ^ f[3] ^ f[4] ^ f[5] ^ 1;
-  h[7] = f[7] ^ f[3] ^ f[4] ^ f[5] ^ f[6];
-  result = 0;
-  for (i = 0; i < 8; ++i)
-    result |= h[i] << i;
-  // printf("%u->%u\n", c, result);
+  unsigned char result = c254 ^ ROTL8(c254, 1) ^ ROTL8(c254, 2) ^
+                         ROTL8(c254, 3) ^ ROTL8(c254, 4) ^ 0x63;
   return result;
 }
-static unsigned char bytesub_restore(unsigned char t, int is_first_party) {
-  unsigned char f[8];
-  unsigned char h[8];
-  unsigned char result;
-  int i;
-
-  for (i = 0; i < 8; ++i)
-    f[i] = 1 & (t >> i);
-  h[0] = f[0] ^ f[4] ^ f[5] ^ f[6] ^ f[7] ^ is_first_party;
-  h[1] = f[1] ^ f[5] ^ f[6] ^ f[7] ^ f[0] ^ is_first_party;
-  h[2] = f[2] ^ f[6] ^ f[7] ^ f[0] ^ f[1];
-  h[3] = f[3] ^ f[7] ^ f[0] ^ f[1] ^ f[2];
-  h[4] = f[4] ^ f[0] ^ f[1] ^ f[2] ^ f[3];
-  h[5] = f[5] ^ f[1] ^ f[2] ^ f[3] ^ f[4] ^ is_first_party;
-  h[6] = f[6] ^ f[2] ^ f[3] ^ f[4] ^ f[5] ^ is_first_party;
-  h[7] = f[7] ^ f[3] ^ f[4] ^ f[5] ^ f[6];
-  result = 0;
-  for (i = 0; i < 8; ++i)
-    result |= h[i] << i;
-  // printf("%u->%u\n", c, result);
-  return result;
+static unsigned char bytesub_restore(unsigned char t,
+                                     unsigned char is_first_party_mask) {
+  unsigned char result =
+      t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);
+  return result ^ (0x63 & is_first_party_mask);
 }
 } // namespace
 
@@ -316,7 +274,7 @@ aes_128_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
           unsigned char s = expanded[party][(i + 1) % 4][j - 1];
           s_shares[party].push_back(s);
           temp[party][i] = bytesub_restore(t_shares[party][sbox_index],
-                                           party == first_party ? 1 : 0);
+                                           party == first_party ? 0xFF : 0);
         }
         sbox_index++;
       }
@@ -343,8 +301,8 @@ aes_128_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (j = 0; j < 4; ++j) {
         for (party = 0; party < num_parties; party++) {
           s_shares[party].push_back(state[party][i][j]);
-          newstate[party][i][j] = bytesub_restore(t_shares[party][sbox_index],
-                                                  party == first_party ? 1 : 0);
+          newstate[party][i][j] = bytesub_restore(
+              t_shares[party][sbox_index], party == first_party ? 0xFF : 0);
         }
         sbox_index++;
       }
@@ -609,7 +567,7 @@ aes_192_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
           unsigned char s = expanded[party][(i + 1) % 4][j - 1];
           s_shares[party].push_back(s);
           temp[party][i] = bytesub_restore(t_shares[party][sbox_index],
-                                           party == first_party ? 1 : 0);
+                                           party == first_party ? 0xFF : 0);
         }
         sbox_index++;
       }
@@ -644,7 +602,7 @@ aes_192_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
           for (party = 0; party < num_parties; party++) {
             s_shares[party].push_back(state[party][i][j]);
             newstate[party][i][j] = bytesub_restore(
-                t_shares[party][sbox_index], party == first_party ? 1 : 0);
+                t_shares[party][sbox_index], party == first_party ? 0xFF : 0);
           }
           sbox_index++;
         }
@@ -924,7 +882,7 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
           unsigned char s = expanded[party][i][j - 1];
           s_shares[party].push_back(s);
           temp[party][i] = bytesub_restore(t_shares[party][sbox_index],
-                                           party == first_party ? 1 : 0);
+                                           party == first_party ? 0xFF : 0);
         }
         sbox_index++;
       }
@@ -934,7 +892,7 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
           unsigned char s = expanded[party][(i + 1) % 4][j - 1];
           s_shares[party].push_back(s);
           temp[party][i] = bytesub_restore(t_shares[party][sbox_index],
-                                           party == first_party ? 1 : 0);
+                                           party == first_party ? 0xFF : 0);
         }
         sbox_index++;
       }
@@ -962,8 +920,8 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (j = 0; j < 4; ++j) {
         for (party = 0; party < num_parties; party++) {
           s_shares[party].push_back(state[party][i][j]);
-          newstate[party][i][j] = bytesub_restore(t_shares[party][sbox_index],
-                                                  party == first_party ? 1 : 0);
+          newstate[party][i][j] = bytesub_restore(
+              t_shares[party][sbox_index], party == first_party ? 0xFF : 0);
         }
         sbox_index++;
       }
@@ -1015,8 +973,8 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (j = 0; j < 4; ++j) {
         for (party = 0; party < num_parties; party++) {
           s_shares[party].push_back(state[party][i][j]);
-          newstate[party][i][j] = bytesub_restore(t_shares[party][sbox_index],
-                                                  party == first_party ? 1 : 0);
+          newstate[party][i][j] = bytesub_restore(
+              t_shares[party][sbox_index], party == first_party ? 0xFF : 0);
         }
         sbox_index++;
       }
