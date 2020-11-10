@@ -4,6 +4,7 @@
 namespace {
 
 #define ROTL8(x, shift) ((uint8_t)((x) << (shift)) | ((x) >> (8 - (shift))))
+constexpr unsigned char AES_SBOX_AFFINE_CONST = 0x63;
 
 unsigned char multiply(unsigned int a, unsigned int b) {
   unsigned char result = 0;
@@ -31,7 +32,8 @@ unsigned char bytesub(unsigned char c) {
   unsigned char c254 = square(c127);
 
   unsigned char result = c254 ^ ROTL8(c254, 1) ^ ROTL8(c254, 2) ^
-                         ROTL8(c254, 3) ^ ROTL8(c254, 4) ^ 0x63;
+                         ROTL8(c254, 3) ^ ROTL8(c254, 4) ^
+                         AES_SBOX_AFFINE_CONST;
 
   return result;
 }
@@ -47,14 +49,15 @@ unsigned char bytesub_save(unsigned char c, std::pair<uint8_t, uint8_t> &save) {
   save.second = c254;
 
   unsigned char result = c254 ^ ROTL8(c254, 1) ^ ROTL8(c254, 2) ^
-                         ROTL8(c254, 3) ^ ROTL8(c254, 4) ^ 0x63;
+                         ROTL8(c254, 3) ^ ROTL8(c254, 4) ^
+                         AES_SBOX_AFFINE_CONST;
   return result;
 }
-static unsigned char bytesub_restore(unsigned char t,
-                                     unsigned char is_first_party_mask) {
+// does not add the affine constant, this is added to first party manually
+inline unsigned char bytesub_restore(unsigned char t) {
   unsigned char result =
       t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);
-  return result ^ (0x63 & is_first_party_mask);
+  return result;
 }
 } // namespace
 
@@ -273,9 +276,9 @@ aes_128_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
         for (party = 0; party < num_parties; party++) {
           unsigned char s = expanded[party][(i + 1) % 4][j - 1];
           s_shares[party].push_back(s);
-          temp[party][i] = bytesub_restore(t_shares[party][sbox_index],
-                                           party == first_party ? 0xFF : 0);
+          temp[party][i] = bytesub_restore(t_shares[party][sbox_index]);
         }
+        temp[0][i] ^= AES_SBOX_AFFINE_CONST;
         sbox_index++;
       }
       temp[first_party][0] ^= roundconstant;
@@ -301,9 +304,9 @@ aes_128_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (j = 0; j < 4; ++j) {
         for (party = 0; party < num_parties; party++) {
           s_shares[party].push_back(state[party][i][j]);
-          newstate[party][i][j] = bytesub_restore(
-              t_shares[party][sbox_index], party == first_party ? 0xFF : 0);
+          newstate[party][i][j] = bytesub_restore(t_shares[party][sbox_index]);
         }
+        newstate[0][i][j] ^= AES_SBOX_AFFINE_CONST;
         sbox_index++;
       }
     for (i = 0; i < 4; ++i)
@@ -566,9 +569,9 @@ aes_192_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
         for (party = 0; party < num_parties; party++) {
           unsigned char s = expanded[party][(i + 1) % 4][j - 1];
           s_shares[party].push_back(s);
-          temp[party][i] = bytesub_restore(t_shares[party][sbox_index],
-                                           party == first_party ? 0xFF : 0);
+          temp[party][i] = bytesub_restore(t_shares[party][sbox_index]);
         }
+        temp[0][i] ^= AES_SBOX_AFFINE_CONST;
         sbox_index++;
       }
       temp[first_party][0] ^= roundconstant;
@@ -601,9 +604,10 @@ aes_192_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
         for (j = 0; j < 4; ++j) {
           for (party = 0; party < num_parties; party++) {
             s_shares[party].push_back(state[party][i][j]);
-            newstate[party][i][j] = bytesub_restore(
-                t_shares[party][sbox_index], party == first_party ? 0xFF : 0);
+            newstate[party][i][j] =
+                bytesub_restore(t_shares[party][sbox_index]);
           }
+          newstate[0][i][j] ^= AES_SBOX_AFFINE_CONST;
           sbox_index++;
         }
       for (i = 0; i < 4; ++i)
@@ -881,9 +885,9 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
         for (party = 0; party < num_parties; party++) {
           unsigned char s = expanded[party][i][j - 1];
           s_shares[party].push_back(s);
-          temp[party][i] = bytesub_restore(t_shares[party][sbox_index],
-                                           party == first_party ? 0xFF : 0);
+          temp[party][i] = bytesub_restore(t_shares[party][sbox_index]);
         }
+        temp[0][i] ^= AES_SBOX_AFFINE_CONST;
         sbox_index++;
       }
     else {
@@ -891,9 +895,9 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
         for (party = 0; party < num_parties; party++) {
           unsigned char s = expanded[party][(i + 1) % 4][j - 1];
           s_shares[party].push_back(s);
-          temp[party][i] = bytesub_restore(t_shares[party][sbox_index],
-                                           party == first_party ? 0xFF : 0);
+          temp[party][i] = bytesub_restore(t_shares[party][sbox_index]);
         }
+        temp[0][i] ^= AES_SBOX_AFFINE_CONST;
         sbox_index++;
       }
       temp[first_party][0] ^= roundconstant;
@@ -920,9 +924,9 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (j = 0; j < 4; ++j) {
         for (party = 0; party < num_parties; party++) {
           s_shares[party].push_back(state[party][i][j]);
-          newstate[party][i][j] = bytesub_restore(
-              t_shares[party][sbox_index], party == first_party ? 0xFF : 0);
+          newstate[party][i][j] = bytesub_restore(t_shares[party][sbox_index]);
         }
+        newstate[0][i][j] ^= AES_SBOX_AFFINE_CONST;
         sbox_index++;
       }
     for (i = 0; i < 4; ++i)
@@ -973,9 +977,9 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (j = 0; j < 4; ++j) {
         for (party = 0; party < num_parties; party++) {
           s_shares[party].push_back(state[party][i][j]);
-          newstate[party][i][j] = bytesub_restore(
-              t_shares[party][sbox_index], party == first_party ? 0xFF : 0);
+          newstate[party][i][j] = bytesub_restore(t_shares[party][sbox_index]);
         }
+        newstate[0][i][j] ^= AES_SBOX_AFFINE_CONST;
         sbox_index++;
       }
     for (i = 0; i < 4; ++i)
