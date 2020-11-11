@@ -26,7 +26,7 @@ public:
   GF2E operator*(const GF2E &other) const;
   bool operator==(const GF2E &other) const;
 
-  void to_bytes(uint8_t *out);
+  void to_bytes(uint8_t *out) const;
   void from_bytes(uint8_t *in);
   static void init_extension_field(const banquet_instance_t &instance);
 };

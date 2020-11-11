@@ -86,13 +86,13 @@ bool GF2E::operator==(const GF2E &other) const {
   return this->data == other.data;
 }
 
-void GF2E::to_bytes(uint8_t *out) {
-  uint64_t be_data = htobe64(data);
+void GF2E::to_bytes(uint8_t *out) const {
+  uint64_t be_data = htole64(data);
   memcpy(out, (uint8_t *)(&be_data), sizeof(be_data));
 }
 void GF2E::from_bytes(uint8_t *in) {
   memcpy((uint8_t *)(&data), in, sizeof(data));
-  data = be64toh(data);
+  data = le64toh(data);
 }
 
 void GF2E::init_extension_field(const banquet_instance_t &instance) {
