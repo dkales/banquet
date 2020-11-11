@@ -78,7 +78,7 @@ std::vector<uint8_t> phase_1_commitment(
     const std::vector<std::vector<std::vector<uint8_t>>> &commitments,
     const std::vector<std::vector<uint8_t>> &key_deltas,
     const std::vector<std::vector<uint8_t>> &t_deltas,
-    const std::vector<std::vector<std::vector<uint8_t>>> &output_broadcasts) {
+    utils::RepByteContainer &output_broadcasts) {
 
   hash_context ctx;
   hash_init_prefix(&ctx, instance.digest_size, HASH_PREFIX_1);
@@ -90,8 +90,8 @@ std::vector<uint8_t> phase_1_commitment(
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       hash_update(&ctx, commitments[repetition][party].data(),
                   commitments[repetition][party].size());
-      hash_update(&ctx, output_broadcasts[repetition][party].data(),
-                  output_broadcasts[repetition][party].size());
+      auto output_broadcast = output_broadcasts.get(repetition, party);
+      hash_update(&ctx, output_broadcast.data(), output_broadcast.size());
     }
     hash_update(&ctx, key_deltas[repetition].data(),
                 key_deltas[repetition].size());
@@ -335,60 +335,73 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   /////////////////////////////////////////////////////////////////////////////
   // phase 1: commit to executions of AES
   /////////////////////////////////////////////////////////////////////////////
-  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_keys;
+  utils::RepByteContainer rep_shared_keys(instance.num_rounds,
+                                          instance.num_MPC_parties,
+                                          instance.aes_params.key_size);
   std::vector<std::vector<uint8_t>> rep_key_deltas;
-  std::vector<std::vector<std::vector<uint8_t>>> rep_output_broadcasts;
-  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_s;
-  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_t;
+  utils::RepByteContainer rep_output_broadcasts(
+      instance.num_rounds, instance.num_MPC_parties,
+      instance.aes_params.block_size * instance.aes_params.num_blocks);
+  utils::RepByteContainer rep_shared_s(instance.num_rounds,
+                                       instance.num_MPC_parties,
+                                       instance.aes_params.num_sboxes);
+  utils::RepByteContainer rep_shared_t(instance.num_rounds,
+                                       instance.num_MPC_parties,
+                                       instance.aes_params.num_sboxes);
   std::vector<std::vector<uint8_t>> rep_t_deltas;
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
 
     // generate sharing of secret key
-    std::vector<std::vector<uint8_t>> shared_key(instance.num_MPC_parties);
     std::vector<uint8_t> key_delta = key;
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      shared_key[party].resize(instance.aes_params.key_size);
-      random_tapes[repetition][party].squeeze_bytes(shared_key[party].data(),
-                                                    shared_key[party].size());
-      std::transform(std::begin(shared_key[party]), std::end(shared_key[party]),
+      auto shared_key = rep_shared_keys.get(repetition, party);
+      random_tapes[repetition][party].squeeze_bytes(shared_key.data(),
+                                                    shared_key.size());
+      std::transform(std::begin(shared_key), std::end(shared_key),
                      std::begin(key_delta), std::begin(key_delta),
                      std::bit_xor<uint8_t>());
     }
 
     // fix first share
+    auto first_share_key = rep_shared_keys.get(repetition, 0);
     std::transform(std::begin(key_delta), std::end(key_delta),
-                   std::begin(shared_key[0]), std::begin(shared_key[0]),
+                   std::begin(first_share_key), std::begin(first_share_key),
                    std::bit_xor<uint8_t>());
 
-    rep_shared_keys.push_back(shared_key);
     rep_key_deltas.push_back(key_delta);
     // generate sharing of t values
-    std::vector<std::vector<uint8_t>> shared_t(instance.num_MPC_parties);
     std::vector<uint8_t> t_deltas = sbox_pairs.second;
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      shared_t[party].resize(instance.aes_params.num_sboxes);
-      random_tapes[repetition][party].squeeze_bytes(shared_t[party].data(),
-                                                    shared_t[party].size());
-      std::transform(std::begin(shared_t[party]), std::end(shared_t[party]),
+      auto shared_t = rep_shared_t.get(repetition, party);
+      random_tapes[repetition][party].squeeze_bytes(shared_t.data(),
+                                                    shared_t.size());
+      std::transform(std::begin(shared_t), std::end(shared_t),
                      std::begin(t_deltas), std::begin(t_deltas),
                      std::bit_xor<uint8_t>());
     }
     // fix first share
+    auto first_share_t = rep_shared_t.get(repetition, 0);
     std::transform(std::begin(t_deltas), std::end(t_deltas),
-                   std::begin(shared_t[0]), std::begin(shared_t[0]),
+                   std::begin(first_share_t), std::begin(first_share_t),
                    std::bit_xor<uint8_t>());
 
     // get shares of sbox inputs by executing MPC AES
-    std::vector<std::vector<uint8_t>> ct_shares;
-    std::vector<std::vector<uint8_t>> shared_s;
+    auto ct_shares = rep_output_broadcasts.get_repetition(repetition);
+    auto shared_s = rep_shared_s.get_repetition(repetition);
 
     if (instance.aes_params.key_size == 16)
-      shared_s = AES128::aes_128_s_shares(shared_key, shared_t, pt, ct_shares);
+      AES128::aes_128_s_shares(rep_shared_keys.get_repetition(repetition),
+                               rep_shared_t.get_repetition(repetition), pt,
+                               ct_shares, shared_s);
     else if (instance.aes_params.key_size == 24)
-      shared_s = AES192::aes_192_s_shares(shared_key, shared_t, pt, ct_shares);
+      AES192::aes_192_s_shares(rep_shared_keys.get_repetition(repetition),
+                               rep_shared_t.get_repetition(repetition), pt,
+                               ct_shares, shared_s);
     else if (instance.aes_params.key_size == 32)
-      shared_s = AES256::aes_256_s_shares(shared_key, shared_t, pt, ct_shares);
+      AES256::aes_256_s_shares(rep_shared_keys.get_repetition(repetition),
+                               rep_shared_t.get_repetition(repetition), pt,
+                               ct_shares, shared_s);
     else
       throw std::runtime_error("invalid parameters");
 
@@ -403,9 +416,6 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     }
 
     assert(ct == ct_check);
-    rep_shared_s.push_back(shared_s);
-    rep_output_broadcasts.push_back(ct_shares);
-    rep_shared_t.push_back(shared_t);
     rep_t_deltas.push_back(t_deltas);
   }
 
@@ -466,11 +476,11 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       std::vector<std::reference_wrapper<const GF2E>> lifted_t;
       lifted_s.reserve(instance.aes_params.num_sboxes);
       lifted_t.reserve(instance.aes_params.num_sboxes);
+      auto shared_s = rep_shared_s.get(repetition, party);
+      auto shared_t = rep_shared_t.get(repetition, party);
       for (size_t idx = 0; idx < instance.aes_params.num_sboxes; idx++) {
-        lifted_s.push_back(
-            utils::lift_uint8_t(rep_shared_s[repetition][party][idx]));
-        lifted_t.push_back(
-            utils::lift_uint8_t(rep_shared_t[repetition][party][idx]));
+        lifted_s.push_back(utils::lift_uint8_t(shared_s[idx]));
+        lifted_t.push_back(utils::lift_uint8_t(shared_t[idx]));
       }
 
       // rearrange shares
@@ -672,7 +682,9 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         party_seed_commitments[repetition][missing_party],
         rep_key_deltas[repetition],
         rep_t_deltas[repetition],
-        rep_output_broadcasts[repetition][missing_party],
+        std::vector<uint8_t>(
+            rep_output_broadcasts.get(repetition, missing_party).begin(),
+            rep_output_broadcasts.get(repetition, missing_party).end()),
         P_deltas[repetition],
         c[repetition],
         a[repetition],
@@ -779,56 +791,69 @@ bool banquet_verify(const banquet_instance_t &instance,
   // recompute commitments to executions of AES
   /////////////////////////////////////////////////////////////////////////////
   // TODO allocate once for all reps, make nice interface
-  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_keys;
-  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_s;
-  std::vector<std::vector<std::vector<uint8_t>>> rep_shared_t;
-  std::vector<std::vector<std::vector<uint8_t>>> rep_output_broadcasts;
+  utils::RepByteContainer rep_shared_keys(instance.num_rounds,
+                                          instance.num_MPC_parties,
+                                          instance.aes_params.key_size);
+  utils::RepByteContainer rep_shared_s(instance.num_rounds,
+                                       instance.num_MPC_parties,
+                                       instance.aes_params.num_sboxes);
+  utils::RepByteContainer rep_shared_t(instance.num_rounds,
+                                       instance.num_MPC_parties,
+                                       instance.aes_params.num_sboxes);
+  utils::RepByteContainer rep_output_broadcasts(
+      instance.num_rounds, instance.num_MPC_parties,
+      instance.aes_params.block_size * instance.aes_params.num_blocks);
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     const banquet_repetition_proof_t &proof = signature.proofs[repetition];
 
     // generate sharing of secret key
-    std::vector<std::vector<uint8_t>> shared_key(instance.num_MPC_parties);
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      shared_key[party].resize(instance.aes_params.key_size);
-      random_tapes[repetition][party].squeeze_bytes(shared_key[party].data(),
-                                                    shared_key[party].size());
+      auto shared_key = rep_shared_keys.get(repetition, party);
+      random_tapes[repetition][party].squeeze_bytes(shared_key.data(),
+                                                    shared_key.size());
     }
 
     // fix first share
+    auto first_key_share = rep_shared_keys.get(repetition, 0);
     std::transform(std::begin(proof.sk_delta), std::end(proof.sk_delta),
-                   std::begin(shared_key[0]), std::begin(shared_key[0]),
+                   std::begin(first_key_share), std::begin(first_key_share),
                    std::bit_xor<uint8_t>());
 
-    rep_shared_keys.push_back(shared_key);
     // generate sharing of t values
-    std::vector<std::vector<uint8_t>> shared_t(instance.num_MPC_parties);
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      shared_t[party].resize(instance.aes_params.num_sboxes);
-      random_tapes[repetition][party].squeeze_bytes(shared_t[party].data(),
-                                                    shared_t[party].size());
+      auto shared_t = rep_shared_t.get(repetition, party);
+      random_tapes[repetition][party].squeeze_bytes(shared_t.data(),
+                                                    shared_t.size());
     }
     // fix first share
+    auto first_shared_t = rep_shared_t.get(repetition, 0);
     std::transform(std::begin(proof.t_delta), std::end(proof.t_delta),
-                   std::begin(shared_t[0]), std::begin(shared_t[0]),
+                   std::begin(first_shared_t), std::begin(first_shared_t),
                    std::bit_xor<uint8_t>());
-    rep_shared_t.push_back(shared_t);
 
     // get shares of sbox inputs by executing MPC AES
-    std::vector<std::vector<uint8_t>> ct_shares;
-    std::vector<std::vector<uint8_t>> shared_s;
+    auto ct_shares = rep_output_broadcasts.get_repetition(repetition);
+    auto shared_s = rep_shared_s.get_repetition(repetition);
 
     if (instance.aes_params.key_size == 16)
-      shared_s = AES128::aes_128_s_shares(shared_key, shared_t, pt, ct_shares);
+      AES128::aes_128_s_shares(rep_shared_keys.get_repetition(repetition),
+                               rep_shared_t.get_repetition(repetition), pt,
+                               ct_shares, shared_s);
     else if (instance.aes_params.key_size == 24)
-      shared_s = AES192::aes_192_s_shares(shared_key, shared_t, pt, ct_shares);
+      AES192::aes_192_s_shares(rep_shared_keys.get_repetition(repetition),
+                               rep_shared_t.get_repetition(repetition), pt,
+                               ct_shares, shared_s);
     else if (instance.aes_params.key_size == 32)
-      shared_s = AES256::aes_256_s_shares(shared_key, shared_t, pt, ct_shares);
+      AES256::aes_256_s_shares(rep_shared_keys.get_repetition(repetition),
+                               rep_shared_t.get_repetition(repetition), pt,
+                               ct_shares, shared_s);
     else
       throw std::runtime_error("invalid parameters");
 
     // get missing output broadcast from proof
-    ct_shares[missing_parties[repetition]] = proof.output_broadcast;
+    std::copy(proof.output_broadcast.begin(), proof.output_broadcast.end(),
+              ct_shares[missing_parties[repetition]].begin());
     // check MPC execution is correct
     std::vector<uint8_t> ct_check(instance.aes_params.block_size *
                                   instance.aes_params.num_blocks);
@@ -841,9 +866,6 @@ bool banquet_verify(const banquet_instance_t &instance,
     if (memcmp(ct_check.data(), ct.data(), ct.size()) != 0) {
       return false;
     }
-
-    rep_shared_s.push_back(shared_s);
-    rep_output_broadcasts.push_back(ct_shares);
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -889,11 +911,11 @@ bool banquet_verify(const banquet_instance_t &instance,
         std::vector<std::reference_wrapper<const GF2E>> lifted_t;
         lifted_s.reserve(instance.aes_params.num_sboxes);
         lifted_t.reserve(instance.aes_params.num_sboxes);
+        auto shared_s = rep_shared_s.get(repetition, party);
+        auto shared_t = rep_shared_t.get(repetition, party);
         for (size_t idx = 0; idx < instance.aes_params.num_sboxes; idx++) {
-          lifted_s.push_back(
-              utils::lift_uint8_t(rep_shared_s[repetition][party][idx]));
-          lifted_t.push_back(
-              utils::lift_uint8_t(rep_shared_t[repetition][party][idx]));
+          lifted_s.push_back(utils::lift_uint8_t(shared_s[idx]));
+          lifted_t.push_back(utils::lift_uint8_t(shared_t[idx]));
         }
 
         // rearrange shares

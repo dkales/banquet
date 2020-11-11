@@ -236,11 +236,11 @@ aes_128_with_sbox_output(const std::vector<uint8_t> &key_in,
   return result;
 }
 
-std::vector<std::vector<uint8_t>>
-aes_128_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
-                 const std::vector<std::vector<uint8_t>> &t_shares,
-                 const std::vector<uint8_t> &plaintext_in,
-                 std::vector<std::vector<uint8_t>> &ciphertext_out) {
+void aes_128_s_shares(const std::vector<std::span<uint8_t>> &key_in,
+                      const std::vector<std::span<uint8_t>> &t_shares,
+                      const std::vector<uint8_t> &plaintext_in,
+                      std::vector<std::span<uint8_t>> &ciphertext_out,
+                      std::vector<std::span<uint8_t>> &s_shares) {
 
   typedef uint8_t expanded_key_t[4][44];
   typedef uint8_t state_t[4][4];
@@ -256,8 +256,6 @@ aes_128_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
   int party;
   int sbox_index = 0;
   int first_party = 0;
-
-  std::vector<std::vector<uint8_t>> s_shares(num_parties);
 
   for (j = 0; j < 4; ++j)
     for (i = 0; i < 4; ++i)
@@ -275,7 +273,7 @@ aes_128_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (i = 0; i < 4; ++i) {
         for (party = 0; party < num_parties; party++) {
           unsigned char s = expanded[party][(i + 1) % 4][j - 1];
-          s_shares[party].push_back(s);
+          s_shares[party][sbox_index] = s;
           temp[party][i] = bytesub_restore(t_shares[party][sbox_index]);
         }
         temp[0][i] ^= AES_SBOX_AFFINE_CONST;
@@ -303,7 +301,7 @@ aes_128_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
     for (i = 0; i < 4; ++i)
       for (j = 0; j < 4; ++j) {
         for (party = 0; party < num_parties; party++) {
-          s_shares[party].push_back(state[party][i][j]);
+          s_shares[party][sbox_index] = state[party][i][j];
           newstate[party][i][j] = bytesub_restore(t_shares[party][sbox_index]);
         }
         newstate[0][i][j] ^= AES_SBOX_AFFINE_CONST;
@@ -334,15 +332,11 @@ aes_128_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
         }
   }
 
-  std::vector<uint8_t> ct_share(AES128::BLOCK_SIZE);
   for (party = 0; party < num_parties; party++) {
     for (j = 0; j < 4; ++j)
       for (i = 0; i < 4; ++i)
-        ct_share[j * 4 + i] = state[party][i][j];
-    ciphertext_out.push_back(ct_share);
+        ciphertext_out[party][j * 4 + i] = state[party][i][j];
   }
-
-  return s_shares;
 }
 } // namespace AES128
 
@@ -529,11 +523,11 @@ aes_192_with_sbox_output(const std::vector<uint8_t> &key_in,
   return result;
 }
 
-std::vector<std::vector<uint8_t>>
-aes_192_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
-                 const std::vector<std::vector<uint8_t>> &t_shares,
-                 const std::vector<uint8_t> &plaintext_in,
-                 std::vector<std::vector<uint8_t>> &ciphertext_out) {
+void aes_192_s_shares(const std::vector<std::span<uint8_t>> &key_in,
+                      const std::vector<std::span<uint8_t>> &t_shares,
+                      const std::vector<uint8_t> &plaintext_in,
+                      std::vector<std::span<uint8_t>> &ciphertext_out,
+                      std::vector<std::span<uint8_t>> &s_shares) {
 
   typedef uint8_t expanded_key_t[4][52];
   typedef uint8_t state_t[4][4];
@@ -549,8 +543,6 @@ aes_192_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
   int party;
   int sbox_index = 0;
   int first_party = 0;
-
-  std::vector<std::vector<uint8_t>> s_shares(num_parties);
 
   for (j = 0; j < 6; ++j)
     for (i = 0; i < 4; ++i)
@@ -568,7 +560,7 @@ aes_192_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (i = 0; i < 4; ++i) {
         for (party = 0; party < num_parties; party++) {
           unsigned char s = expanded[party][(i + 1) % 4][j - 1];
-          s_shares[party].push_back(s);
+          s_shares[party][sbox_index] = s;
           temp[party][i] = bytesub_restore(t_shares[party][sbox_index]);
         }
         temp[0][i] ^= AES_SBOX_AFFINE_CONST;
@@ -581,11 +573,6 @@ aes_192_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (party = 0; party < num_parties; party++) {
         expanded[party][i][j] = temp[party][i] ^ expanded[party][i][j - 6];
       }
-  }
-
-  for (party = 0; party < num_parties; party++) {
-    std::vector<uint8_t> ct_share(AES192::BLOCK_SIZE * AES192::NUM_BLOCKS);
-    ciphertext_out.push_back(ct_share);
   }
 
   for (int k = 0; k < AES192::NUM_BLOCKS; k++) {
@@ -603,7 +590,7 @@ aes_192_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (i = 0; i < 4; ++i)
         for (j = 0; j < 4; ++j) {
           for (party = 0; party < num_parties; party++) {
-            s_shares[party].push_back(state[party][i][j]);
+            s_shares[party][sbox_index] = state[party][i][j];
             newstate[party][i][j] =
                 bytesub_restore(t_shares[party][sbox_index]);
           }
@@ -642,8 +629,6 @@ aes_192_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
               state[party][i][j];
     }
   }
-
-  return s_shares;
 }
 } // namespace AES192
 
@@ -845,11 +830,11 @@ aes_256_with_sbox_output(const std::vector<uint8_t> &key_in,
   return result;
 }
 
-std::vector<std::vector<uint8_t>>
-aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
-                 const std::vector<std::vector<uint8_t>> &t_shares,
-                 const std::vector<uint8_t> &plaintext_in,
-                 std::vector<std::vector<uint8_t>> &ciphertext_out) {
+void aes_256_s_shares(const std::vector<std::span<uint8_t>> &key_in,
+                      const std::vector<std::span<uint8_t>> &t_shares,
+                      const std::vector<uint8_t> &plaintext_in,
+                      std::vector<std::span<uint8_t>> &ciphertext_out,
+                      std::vector<std::span<uint8_t>> &s_shares) {
 
   typedef uint8_t expanded_key_t[4][60];
   typedef uint8_t state_t[4][4];
@@ -865,8 +850,6 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
   int party;
   int sbox_index = 0;
   int first_party = 0;
-
-  std::vector<std::vector<uint8_t>> s_shares(num_parties);
 
   for (j = 0; j < 8; ++j)
     for (i = 0; i < 4; ++i)
@@ -884,7 +867,7 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (i = 0; i < 4; ++i) {
         for (party = 0; party < num_parties; party++) {
           unsigned char s = expanded[party][i][j - 1];
-          s_shares[party].push_back(s);
+          s_shares[party][sbox_index] = s;
           temp[party][i] = bytesub_restore(t_shares[party][sbox_index]);
         }
         temp[0][i] ^= AES_SBOX_AFFINE_CONST;
@@ -894,7 +877,7 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       for (i = 0; i < 4; ++i) {
         for (party = 0; party < num_parties; party++) {
           unsigned char s = expanded[party][(i + 1) % 4][j - 1];
-          s_shares[party].push_back(s);
+          s_shares[party][sbox_index] = s;
           temp[party][i] = bytesub_restore(t_shares[party][sbox_index]);
         }
         temp[0][i] ^= AES_SBOX_AFFINE_CONST;
@@ -909,110 +892,59 @@ aes_256_s_shares(const std::vector<std::vector<uint8_t>> &key_in,
       }
   }
 
-  // first pt
-  for (j = 0; j < 4; ++j)
-    for (i = 0; i < 4; ++i) {
-      state[first_party][i][j] =
-          plaintext_in[j * 4 + i] ^ expanded[first_party][i][j];
-      for (party = 1; party < num_parties; party++) {
-        state[party][i][j] = expanded[party][i][j];
-      }
-    }
-
-  for (r = 0; r < 14; ++r) {
-    for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j) {
-        for (party = 0; party < num_parties; party++) {
-          s_shares[party].push_back(state[party][i][j]);
-          newstate[party][i][j] = bytesub_restore(t_shares[party][sbox_index]);
-        }
-        newstate[0][i][j] ^= AES_SBOX_AFFINE_CONST;
-        sbox_index++;
-      }
-    for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j)
-        for (party = 0; party < num_parties; party++) {
-          state[party][i][j] = newstate[party][i][(j + i) % 4];
-        }
-    if (r < 13)
-      for (j = 0; j < 4; ++j) {
-        for (party = 0; party < num_parties; party++) {
-          unsigned char a0 = state[party][0][j];
-          unsigned char a1 = state[party][1][j];
-          unsigned char a2 = state[party][2][j];
-          unsigned char a3 = state[party][3][j];
-          state[party][0][j] = xtime(a0 ^ a1) ^ a1 ^ a2 ^ a3;
-          state[party][1][j] = xtime(a1 ^ a2) ^ a2 ^ a3 ^ a0;
-          state[party][2][j] = xtime(a2 ^ a3) ^ a3 ^ a0 ^ a1;
-          state[party][3][j] = xtime(a3 ^ a0) ^ a0 ^ a1 ^ a2;
-        }
-      }
-    for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j)
-        for (party = 0; party < num_parties; party++) {
-          state[party][i][j] ^= expanded[party][i][r * 4 + 4 + j];
-        }
-  }
-
-  std::vector<uint8_t> ct_share(AES256::BLOCK_SIZE * AES256::NUM_BLOCKS);
-  for (party = 0; party < num_parties; party++) {
+  for (int k = 0; k < AES256::NUM_BLOCKS; k++) {
+    // second pt
     for (j = 0; j < 4; ++j)
-      for (i = 0; i < 4; ++i)
-        ct_share[j * 4 + i] = state[party][i][j];
-    ciphertext_out.push_back(ct_share);
-  }
-
-  // second pt
-  for (j = 0; j < 4; ++j)
-    for (i = 0; i < 4; ++i) {
-      state[first_party][i][j] = plaintext_in[AES256::BLOCK_SIZE + j * 4 + i] ^
-                                 expanded[first_party][i][j];
-      for (party = 1; party < num_parties; party++) {
-        state[party][i][j] = expanded[party][i][j];
+      for (i = 0; i < 4; ++i) {
+        state[first_party][i][j] =
+            plaintext_in[k * AES256::BLOCK_SIZE + j * 4 + i] ^
+            expanded[first_party][i][j];
+        for (party = 1; party < num_parties; party++) {
+          state[party][i][j] = expanded[party][i][j];
+        }
       }
+
+    for (r = 0; r < 14; ++r) {
+      for (i = 0; i < 4; ++i)
+        for (j = 0; j < 4; ++j) {
+          for (party = 0; party < num_parties; party++) {
+            s_shares[party][sbox_index] = state[party][i][j];
+            newstate[party][i][j] =
+                bytesub_restore(t_shares[party][sbox_index]);
+          }
+          newstate[0][i][j] ^= AES_SBOX_AFFINE_CONST;
+          sbox_index++;
+        }
+      for (i = 0; i < 4; ++i)
+        for (j = 0; j < 4; ++j)
+          for (party = 0; party < num_parties; party++) {
+            state[party][i][j] = newstate[party][i][(j + i) % 4];
+          }
+      if (r < 13)
+        for (j = 0; j < 4; ++j) {
+          for (party = 0; party < num_parties; party++) {
+            unsigned char a0 = state[party][0][j];
+            unsigned char a1 = state[party][1][j];
+            unsigned char a2 = state[party][2][j];
+            unsigned char a3 = state[party][3][j];
+            state[party][0][j] = xtime(a0 ^ a1) ^ a1 ^ a2 ^ a3;
+            state[party][1][j] = xtime(a1 ^ a2) ^ a2 ^ a3 ^ a0;
+            state[party][2][j] = xtime(a2 ^ a3) ^ a3 ^ a0 ^ a1;
+            state[party][3][j] = xtime(a3 ^ a0) ^ a0 ^ a1 ^ a2;
+          }
+        }
+      for (i = 0; i < 4; ++i)
+        for (j = 0; j < 4; ++j)
+          for (party = 0; party < num_parties; party++) {
+            state[party][i][j] ^= expanded[party][i][r * 4 + 4 + j];
+          }
     }
-
-  for (r = 0; r < 14; ++r) {
-    for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j) {
-        for (party = 0; party < num_parties; party++) {
-          s_shares[party].push_back(state[party][i][j]);
-          newstate[party][i][j] = bytesub_restore(t_shares[party][sbox_index]);
-        }
-        newstate[0][i][j] ^= AES_SBOX_AFFINE_CONST;
-        sbox_index++;
-      }
-    for (i = 0; i < 4; ++i)
+    for (party = 0; party < num_parties; party++) {
       for (j = 0; j < 4; ++j)
-        for (party = 0; party < num_parties; party++) {
-          state[party][i][j] = newstate[party][i][(j + i) % 4];
-        }
-    if (r < 13)
-      for (j = 0; j < 4; ++j) {
-        for (party = 0; party < num_parties; party++) {
-          unsigned char a0 = state[party][0][j];
-          unsigned char a1 = state[party][1][j];
-          unsigned char a2 = state[party][2][j];
-          unsigned char a3 = state[party][3][j];
-          state[party][0][j] = xtime(a0 ^ a1) ^ a1 ^ a2 ^ a3;
-          state[party][1][j] = xtime(a1 ^ a2) ^ a2 ^ a3 ^ a0;
-          state[party][2][j] = xtime(a2 ^ a3) ^ a3 ^ a0 ^ a1;
-          state[party][3][j] = xtime(a3 ^ a0) ^ a0 ^ a1 ^ a2;
-        }
-      }
-    for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j)
-        for (party = 0; party < num_parties; party++) {
-          state[party][i][j] ^= expanded[party][i][r * 4 + 4 + j];
-        }
+        for (i = 0; i < 4; ++i)
+          ciphertext_out[party][k * AES256::BLOCK_SIZE + j * 4 + i] =
+              state[party][i][j];
+    }
   }
-  for (party = 0; party < num_parties; party++) {
-    for (j = 0; j < 4; ++j)
-      for (i = 0; i < 4; ++i)
-        ciphertext_out[party][AES256::BLOCK_SIZE + j * 4 + i] =
-            state[party][i][j];
-  }
-
-  return s_shares;
 }
 } // namespace AES256
