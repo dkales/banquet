@@ -110,6 +110,12 @@ void GF2E::to_bytes(uint8_t *out) const {
   uint64_t be_data = htole64(data);
   memcpy(out, (uint8_t *)(&be_data), byte_size);
 }
+std::vector<uint8_t> GF2E::to_bytes() const {
+  std::vector<uint8_t> buffer(byte_size);
+  this->to_bytes(buffer.data());
+  return buffer;
+}
+
 void GF2E::from_bytes(uint8_t *in) {
   data = 0;
   memcpy((uint8_t *)(&data), in, byte_size);

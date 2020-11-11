@@ -5,8 +5,8 @@
 #include <cstdlib>
 #include <vector>
 
-#include <NTL/GF2E.h>
-using namespace NTL;
+#include "field.h"
+
 /* Prefix values for domain separation */
 constexpr uint8_t HASH_PREFIX_0 = 0;
 constexpr uint8_t HASH_PREFIX_1 = 1;
@@ -30,10 +30,10 @@ struct banquet_repetition_proof_t {
   std::vector<uint8_t> sk_delta;
   std::vector<uint8_t> t_delta;
   std::vector<uint8_t> output_broadcast;
-  std::vector<GF2E> P_delta;
-  GF2E P_at_R;
-  std::vector<GF2E> S_j_at_R;
-  std::vector<GF2E> T_j_at_R;
+  std::vector<field::GF2E> P_delta;
+  field::GF2E P_at_R;
+  std::vector<field::GF2E> S_j_at_R;
+  std::vector<field::GF2E> T_j_at_R;
 };
 
 struct banquet_signature_t {

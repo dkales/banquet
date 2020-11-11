@@ -25,11 +25,18 @@ inline std::vector<uint8_t> GF2E_to_bytes(const banquet_instance_t &instance,
   return buffer;
 }
 
-inline void hash_update_GF2E(hash_context *ctx,
-                             const banquet_instance_t &instance,
-                             const GF2E &element) {
+inline void hash_update_GF2E_ntl(hash_context *ctx,
+                                 const banquet_instance_t &instance,
+                                 const GF2E &element) {
   std::vector<uint8_t> buffer = GF2E_to_bytes(instance, element);
   hash_update(ctx, buffer.data(), buffer.size());
+}
+inline void hash_update_GF2E(hash_context *ctx,
+                             const banquet_instance_t &instance,
+                             const field::GF2E &element) {
+  std::array<uint8_t, 8> buffer;
+  element.to_bytes(buffer.data());
+  hash_update(ctx, buffer.data(), instance.lambda);
 }
 
 std::pair<banquet_salt_t, std::vector<std::vector<uint8_t>>>
@@ -131,7 +138,7 @@ phase_1_expand(const banquet_instance_t &instance,
 std::vector<uint8_t>
 phase_2_commitment(const banquet_instance_t &instance,
                    const banquet_salt_t &salt, const std::vector<uint8_t> &h_1,
-                   const std::vector<std::vector<GF2E>> &P_deltas) {
+                   const std::vector<std::vector<field::GF2E>> &P_deltas) {
 
   hash_context ctx;
   hash_init_prefix(&ctx, instance.digest_size, HASH_PREFIX_2);
@@ -183,12 +190,12 @@ std::vector<GF2E> phase_2_expand(const banquet_instance_t &instance,
 
 std::vector<uint8_t> phase_3_commitment(
     const banquet_instance_t &instance, const banquet_salt_t &salt,
-    const std::vector<uint8_t> &h_2, const std::vector<GF2E> &c,
-    const std::vector<std::vector<GF2E>> &c_shares,
-    const std::vector<std::vector<GF2E>> &a,
-    const std::vector<std::vector<std::vector<GF2E>>> &a_shares,
-    const std::vector<std::vector<GF2E>> &b,
-    const std::vector<std::vector<std::vector<GF2E>>> &b_shares) {
+    const std::vector<uint8_t> &h_2, const std::vector<field::GF2E> &c,
+    const std::vector<std::vector<field::GF2E>> &c_shares,
+    const std::vector<std::vector<field::GF2E>> &a,
+    const std::vector<std::vector<std::vector<field::GF2E>>> &a_shares,
+    const std::vector<std::vector<field::GF2E>> &b,
+    const std::vector<std::vector<std::vector<field::GF2E>>> &b_shares) {
 
   hash_context ctx;
   hash_init_prefix(&ctx, instance.digest_size, HASH_PREFIX_3);
@@ -445,10 +452,10 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_m2 =
       field::precompute_lagrange_polynomials(
           x_values_for_interpolation_zero_to_m2);
-  vec_GF2E x_values_for_interpolation_zero_to_2m2 =
-      utils::get_first_n_field_elements(2 * instance.m2 + 1);
-  std::vector<GF2EX> precomputation_for_zero_to_2m2 =
-      utils::precompute_lagrange_polynomials(
+  std::vector<field::GF2E> x_values_for_interpolation_zero_to_2m2 =
+      field::get_first_n_field_elements(2 * instance.m2 + 1);
+  std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_2m2 =
+      field::precompute_lagrange_polynomials(
           x_values_for_interpolation_zero_to_2m2);
 
   std::vector<std::vector<std::vector<std::vector<field::GF2E>>>> s_prime(
@@ -461,7 +468,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   std::vector<std::vector<std::vector<field::GF2E>>> P_e_shares(
       instance.num_rounds);
   // std::vector<std::vector<GF2EX>> P_ei(instance.num_rounds);
-  std::vector<std::vector<GF2E>> P_deltas(instance.num_rounds);
+  std::vector<std::vector<field::GF2E>> P_deltas(instance.num_rounds);
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     s_prime[repetition].resize(instance.num_MPC_parties);
@@ -573,14 +580,12 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     }
     for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
       // calculate offset
-      field::GF2E k_element =
-          utils::ntl_to_custom(x_values_for_interpolation_zero_to_2m2[k]);
+      field::GF2E k_element = x_values_for_interpolation_zero_to_2m2[k];
       field::GF2E P_at_k_delta = field::eval(P, k_element);
       for (size_t party = 0; party < instance.num_MPC_parties; party++) {
         P_at_k_delta -= P_shares[party][k];
       }
-      P_deltas[repetition][k - instance.m2] =
-          utils::custom_to_ntl(P_at_k_delta);
+      P_deltas[repetition][k - instance.m2] = P_at_k_delta;
       // adjust first share
       P_shares[0][k] += P_at_k_delta;
     }
@@ -608,12 +613,14 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   // phase 5: commit to the views of the checking protocol
   /////////////////////////////////////////////////////////////////////////////
 
-  std::vector<GF2E> c(instance.num_rounds);
-  std::vector<std::vector<GF2E>> c_shares(instance.num_rounds);
-  std::vector<std::vector<GF2E>> a(instance.num_rounds);
-  std::vector<std::vector<std::vector<GF2E>>> a_shares(instance.num_rounds);
-  std::vector<std::vector<GF2E>> b(instance.num_rounds);
-  std::vector<std::vector<std::vector<GF2E>>> b_shares(instance.num_rounds);
+  std::vector<field::GF2E> c(instance.num_rounds);
+  std::vector<std::vector<field::GF2E>> c_shares(instance.num_rounds);
+  std::vector<std::vector<field::GF2E>> a(instance.num_rounds);
+  std::vector<std::vector<std::vector<field::GF2E>>> a_shares(
+      instance.num_rounds);
+  std::vector<std::vector<field::GF2E>> b(instance.num_rounds);
+  std::vector<std::vector<std::vector<field::GF2E>>> b_shares(
+      instance.num_rounds);
 
   std::vector<field::GF2E> lagrange_polys_evaluated_at_Re_m2;
   std::vector<field::GF2E> lagrange_polys_evaluated_at_Re_2m2;
@@ -622,12 +629,13 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     for (size_t k = 0; k < instance.m2 + 1; k++) {
       lagrange_polys_evaluated_at_Re_m2[k] =
-          eval(precomputation_for_zero_to_m2[k],
-               utils::ntl_to_custom(R_es[repetition]));
+          field::eval(precomputation_for_zero_to_m2[k],
+                      utils::ntl_to_custom(R_es[repetition]));
     }
     for (size_t k = 0; k < 2 * instance.m2 + 1; k++) {
-      lagrange_polys_evaluated_at_Re_2m2[k] = utils::ntl_to_custom(
-          eval(precomputation_for_zero_to_2m2[k], R_es[repetition]));
+      lagrange_polys_evaluated_at_Re_2m2[k] =
+          field::eval(precomputation_for_zero_to_2m2[k],
+                      utils::ntl_to_custom(R_es[repetition]));
     }
 
     c_shares[repetition].resize(instance.num_MPC_parties);
@@ -644,14 +652,14 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         // eval(S_eji[repetition][party][j], R_es[repetition]);
         // b_shares[repetition][party][j] =
         // eval(T_eji[repetition][party][j], R_es[repetition]);
-        a_shares[repetition][party][j] = utils::custom_to_ntl(dot_product(
-            lagrange_polys_evaluated_at_Re_m2, s_prime[repetition][party][j]));
-        b_shares[repetition][party][j] = utils::custom_to_ntl(dot_product(
-            lagrange_polys_evaluated_at_Re_m2, t_prime[repetition][party][j]));
+        a_shares[repetition][party][j] = dot_product(
+            lagrange_polys_evaluated_at_Re_m2, s_prime[repetition][party][j]);
+        b_shares[repetition][party][j] = dot_product(
+            lagrange_polys_evaluated_at_Re_m2, t_prime[repetition][party][j]);
       }
       // compute c_e^i
-      c_shares[repetition][party] = utils::custom_to_ntl(dot_product(
-          lagrange_polys_evaluated_at_Re_2m2, P_e_shares[repetition][party]));
+      c_shares[repetition][party] = dot_product(
+          lagrange_polys_evaluated_at_Re_2m2, P_e_shares[repetition][party]);
     }
     // open c_e and a,b values
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
@@ -737,7 +745,7 @@ bool banquet_verify(const banquet_instance_t &instance,
   std::vector<std::vector<std::vector<uint8_t>>> party_seed_commitments;
 
   // recompute h_2
-  std::vector<std::vector<GF2E>> P_deltas;
+  std::vector<std::vector<field::GF2E>> P_deltas;
   for (const banquet_repetition_proof_t &proof : signature.proofs) {
     P_deltas.push_back(proof.P_delta);
   }
@@ -991,7 +999,7 @@ bool banquet_verify(const banquet_instance_t &instance,
     if (0 != missing_parties[repetition]) {
       for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
         // adjust first share with delta from signature
-        P_shares[0][k] += proof.P_delta[k - instance.m2];
+        P_shares[0][k] += utils::custom_to_ntl(proof.P_delta[k - instance.m2]);
       }
     }
     // for (size_t party = 0; party < instance.num_MPC_parties; party++) {
@@ -1006,12 +1014,14 @@ bool banquet_verify(const banquet_instance_t &instance,
   /////////////////////////////////////////////////////////////////////////////
   // recompute views of polynomial checks
   /////////////////////////////////////////////////////////////////////////////
-  std::vector<GF2E> c(instance.num_rounds);
-  std::vector<std::vector<GF2E>> c_shares(instance.num_rounds);
-  std::vector<std::vector<GF2E>> a(instance.num_rounds);
-  std::vector<std::vector<std::vector<GF2E>>> a_shares(instance.num_rounds);
-  std::vector<std::vector<GF2E>> b(instance.num_rounds);
-  std::vector<std::vector<std::vector<GF2E>>> b_shares(instance.num_rounds);
+  std::vector<field::GF2E> c(instance.num_rounds);
+  std::vector<std::vector<field::GF2E>> c_shares(instance.num_rounds);
+  std::vector<std::vector<field::GF2E>> a(instance.num_rounds);
+  std::vector<std::vector<std::vector<field::GF2E>>> a_shares(
+      instance.num_rounds);
+  std::vector<std::vector<field::GF2E>> b(instance.num_rounds);
+  std::vector<std::vector<std::vector<field::GF2E>>> b_shares(
+      instance.num_rounds);
 
   vec_GF2E lagrange_polys_evaluated_at_Re_m2;
   lagrange_polys_evaluated_at_Re_m2.SetLength(instance.m2 + 1);
@@ -1046,15 +1056,17 @@ bool banquet_verify(const banquet_instance_t &instance,
           //  b_shares[repetition][party][j] =
           //  eval(T_eji[repetition][party][j], R_es[repetition]);
           a_shares[repetition][party][j] =
-              lagrange_polys_evaluated_at_Re_m2 * s_prime[repetition][party][j];
+              utils::ntl_to_custom(lagrange_polys_evaluated_at_Re_m2 *
+                                   s_prime[repetition][party][j]);
           b_shares[repetition][party][j] =
-              lagrange_polys_evaluated_at_Re_m2 * t_prime[repetition][party][j];
+              utils::ntl_to_custom(lagrange_polys_evaluated_at_Re_m2 *
+                                   t_prime[repetition][party][j]);
         }
         // compute c_e^i
         // c_shares[repetition][party] =
         // eval(P_ei[repetition][party], R_es[repetition]);
-        c_shares[repetition][party] =
-            lagrange_polys_evaluated_at_Re_2m2 * P_e_shares[repetition][party];
+        c_shares[repetition][party] = utils::ntl_to_custom(
+            lagrange_polys_evaluated_at_Re_2m2 * P_e_shares[repetition][party]);
       }
     }
 
@@ -1104,8 +1116,7 @@ bool banquet_verify(const banquet_instance_t &instance,
 
   // check if P_e(R) = Sum_j S_e_j(R) * T_e_j(R) for all e
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
-    GF2E accum;
-    clear(accum);
+    field::GF2E accum;
     for (size_t j = 0; j < instance.m1; j++) {
       accum += signature.proofs[repetition].S_j_at_R[j] *
                signature.proofs[repetition].T_j_at_R[j];
@@ -1143,19 +1154,19 @@ banquet_serialize_signature(const banquet_instance_t &instance,
     serialized.insert(serialized.end(), proof.output_broadcast.begin(),
                       proof.output_broadcast.end());
     for (size_t k = 0; k < instance.m2 + 1; k++) {
-      std::vector<uint8_t> buffer = GF2E_to_bytes(instance, proof.P_delta[k]);
+      std::vector<uint8_t> buffer = proof.P_delta[k].to_bytes();
       serialized.insert(serialized.end(), buffer.begin(), buffer.end());
     }
     {
-      std::vector<uint8_t> buffer = GF2E_to_bytes(instance, proof.P_at_R);
+      std::vector<uint8_t> buffer = proof.P_at_R.to_bytes();
       serialized.insert(serialized.end(), buffer.begin(), buffer.end());
     }
     for (size_t j = 0; j < instance.m1; j++) {
-      std::vector<uint8_t> buffer = GF2E_to_bytes(instance, proof.S_j_at_R[j]);
+      std::vector<uint8_t> buffer = proof.S_j_at_R[j].to_bytes();
       serialized.insert(serialized.end(), buffer.begin(), buffer.end());
     }
     for (size_t j = 0; j < instance.m1; j++) {
-      std::vector<uint8_t> buffer = GF2E_to_bytes(instance, proof.T_j_at_R[j]);
+      std::vector<uint8_t> buffer = proof.T_j_at_R[j].to_bytes();
       serialized.insert(serialized.end(), buffer.begin(), buffer.end());
     }
   }
@@ -1211,36 +1222,40 @@ banquet_deserialize_signature(const banquet_instance_t &instance,
            output_broadcast.size());
     current_offset += output_broadcast.size();
 
-    std::vector<GF2E> P_delta;
+    field::GF2E tmp;
+    std::vector<field::GF2E> P_delta;
     P_delta.reserve(instance.m2 + 1);
     for (size_t k = 0; k < instance.m2 + 1; k++) {
       std::vector<uint8_t> buffer(instance.lambda);
       memcpy(buffer.data(), serialized.data() + current_offset, buffer.size());
       current_offset += buffer.size();
-      P_delta.push_back(utils::GF2E_from_bytes(buffer));
+      tmp.from_bytes(buffer.data());
+      P_delta.push_back(tmp);
     }
-    GF2E P_at_R;
+    field::GF2E P_at_R;
     {
       std::vector<uint8_t> buffer(instance.lambda);
       memcpy(buffer.data(), serialized.data() + current_offset, buffer.size());
       current_offset += buffer.size();
-      P_at_R = utils::GF2E_from_bytes(buffer);
+      P_at_R.from_bytes(buffer.data());
     }
-    std::vector<GF2E> S_j_at_R;
+    std::vector<field::GF2E> S_j_at_R;
     S_j_at_R.reserve(instance.m1);
     for (size_t j = 0; j < instance.m1; j++) {
       std::vector<uint8_t> buffer(instance.lambda);
       memcpy(buffer.data(), serialized.data() + current_offset, buffer.size());
       current_offset += buffer.size();
-      S_j_at_R.push_back(utils::GF2E_from_bytes(buffer));
+      tmp.from_bytes(buffer.data());
+      S_j_at_R.push_back(tmp);
     }
-    std::vector<GF2E> T_j_at_R;
+    std::vector<field::GF2E> T_j_at_R;
     T_j_at_R.reserve(instance.m1);
     for (size_t j = 0; j < instance.m1; j++) {
       std::vector<uint8_t> buffer(instance.lambda);
       memcpy(buffer.data(), serialized.data() + current_offset, buffer.size());
       current_offset += buffer.size();
-      T_j_at_R.push_back(utils::GF2E_from_bytes(buffer));
+      tmp.from_bytes(buffer.data());
+      T_j_at_R.push_back(tmp);
     }
     proofs.emplace_back(banquet_repetition_proof_t{
         reveallist, C_e, sk_delta, t_delta, output_broadcast, P_delta, P_at_R,
