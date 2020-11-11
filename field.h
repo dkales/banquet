@@ -10,7 +10,15 @@ extern "C" {
 }
 
 namespace field {
+class GF2E;
+}
+
+field::GF2E operator*(const std::vector<field::GF2E> &lhs,
+                      const std::vector<field::GF2E> &rhs);
+
+namespace field {
 class GF2E {
+
   uint64_t data;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wignored-attributes"
@@ -24,12 +32,16 @@ public:
 
   void set_coeff(size_t idx) { data |= (1ULL << idx); }
   GF2E operator+(const GF2E &other) const;
+  GF2E &operator+=(const GF2E &other);
   GF2E operator*(const GF2E &other) const;
   bool operator==(const GF2E &other) const;
 
   void to_bytes(uint8_t *out) const;
   void from_bytes(uint8_t *in);
   static void init_extension_field(const banquet_instance_t &instance);
+
+  friend GF2E(::operator*)(const std::vector<field::GF2E> &lhs,
+                           const std::vector<field::GF2E> &rhs);
 };
 
 const GF2E &lift_uint8_t(uint8_t value);
@@ -44,3 +56,8 @@ std::vector<GF2E> interpolate_with_precomputation(
 std::vector<GF2E> build_from_roots(const std::vector<GF2E> &roots);
 GF2E eval(const std::vector<GF2E> &poly, const GF2E &point);
 } // namespace field
+
+std::vector<field::GF2E> operator+(const std::vector<field::GF2E> &lhs,
+                                   const std::vector<field::GF2E> &rhs);
+std::vector<field::GF2E> &operator+=(std::vector<field::GF2E> &self,
+                                     const std::vector<field::GF2E> &rhs);

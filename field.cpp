@@ -80,6 +80,10 @@ size_t GF2E::byte_size = 4;
 GF2E GF2E::operator+(const GF2E &other) const {
   return GF2E(this->data ^ other.data);
 }
+GF2E &GF2E::operator+=(const GF2E &other) {
+  this->data ^= other.data;
+  return *this;
+}
 GF2E GF2E::operator*(const GF2E &other) const {
   return GF2E(reduce(clmul(this->data, other.data)));
 }
@@ -245,3 +249,40 @@ std::vector<GF2E> interpolate_with_precomputation(
   return res;
 }
 } // namespace field
+
+std::vector<field::GF2E> operator+(const std::vector<field::GF2E> &lhs,
+                                   const std::vector<field::GF2E> &rhs) {
+  if (lhs.size() != rhs.size())
+    throw std::runtime_error("adding vectors of different sizes");
+
+  std::vector<field::GF2E> result(lhs);
+  for (size_t i = 0; i < lhs.size(); i++)
+    result[i] += rhs[i];
+
+  return result;
+}
+
+std::vector<field::GF2E> &operator+=(std::vector<field::GF2E> &lhs,
+                                     const std::vector<field::GF2E> &rhs) {
+  if (lhs.size() != rhs.size())
+    throw std::runtime_error("adding vectors of different sizes");
+
+  for (size_t i = 0; i < lhs.size(); i++)
+    lhs[i] += rhs[i];
+
+  return lhs;
+}
+
+// somewhat optimized inner product, only do one lazy reduction
+field::GF2E operator*(const std::vector<field::GF2E> &lhs,
+                      const std::vector<field::GF2E> &rhs) {
+
+  if (lhs.size() != rhs.size())
+    throw std::runtime_error("adding vectors of different sizes");
+  __m128i accum = _mm_setzero_si128();
+  for (size_t i = 0; i < lhs.size(); i++)
+    accum = _mm_xor_si128(accum, clmul(lhs[i].data, rhs[i].data));
+
+  field::GF2E result(field::GF2E::reduce(accum));
+  return result;
+}

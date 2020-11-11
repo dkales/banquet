@@ -1,6 +1,7 @@
 #include "banquet.h"
 
 #include "aes.h"
+#include "field.h"
 #include "tape.h"
 #include "tree.h"
 #include "utils.h"
@@ -271,6 +272,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
                                  const uint8_t *message, size_t message_len) {
   // init modulus of extension field F_{2^{8\lambda}}
   utils::init_extension_field(instance);
+  field::GF2E::init_extension_field(instance);
 
   // grab aes key, pt and ct
   std::vector<uint8_t> key = keypair.first;
@@ -338,7 +340,6 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   utils::RepByteContainer rep_shared_keys(instance.num_rounds,
                                           instance.num_MPC_parties,
                                           instance.aes_params.key_size);
-  std::vector<std::vector<uint8_t>> rep_key_deltas;
   utils::RepByteContainer rep_output_broadcasts(
       instance.num_rounds, instance.num_MPC_parties,
       instance.aes_params.block_size * instance.aes_params.num_blocks);
@@ -348,6 +349,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   utils::RepByteContainer rep_shared_t(instance.num_rounds,
                                        instance.num_MPC_parties,
                                        instance.aes_params.num_sboxes);
+  std::vector<std::vector<uint8_t>> rep_key_deltas;
   std::vector<std::vector<uint8_t>> rep_t_deltas;
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
@@ -449,8 +451,10 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       utils::precompute_lagrange_polynomials(
           x_values_for_interpolation_zero_to_2m2);
 
-  std::vector<std::vector<std::vector<vec_GF2E>>> s_prime(instance.num_rounds);
-  std::vector<std::vector<std::vector<vec_GF2E>>> t_prime(instance.num_rounds);
+  std::vector<std::vector<std::vector<std::vector<field::GF2E>>>> s_prime(
+      instance.num_rounds);
+  std::vector<std::vector<std::vector<std::vector<field::GF2E>>>> t_prime(
+      instance.num_rounds);
   // std::vector<std::vector<std::vector<GF2EX>>> S_eji(instance.num_rounds);
   // std::vector<std::vector<std::vector<GF2EX>>> T_eji(instance.num_rounds);
   std::vector<GF2EX> P_e(instance.num_rounds);
@@ -472,37 +476,38 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       // S_eji[repetition][party].resize(instance.m1);
       // T_eji[repetition][party].resize(instance.m1);
       // lift shares from F_{2^8} to F_{2^{8\lambda}}
-      std::vector<std::reference_wrapper<const GF2E>> lifted_s;
-      std::vector<std::reference_wrapper<const GF2E>> lifted_t;
+      std::vector<std::reference_wrapper<const field::GF2E>> lifted_s;
+      std::vector<std::reference_wrapper<const field::GF2E>> lifted_t;
       lifted_s.reserve(instance.aes_params.num_sboxes);
       lifted_t.reserve(instance.aes_params.num_sboxes);
       auto shared_s = rep_shared_s.get(repetition, party);
       auto shared_t = rep_shared_t.get(repetition, party);
       for (size_t idx = 0; idx < instance.aes_params.num_sboxes; idx++) {
-        lifted_s.push_back(utils::lift_uint8_t(shared_s[idx]));
-        lifted_t.push_back(utils::lift_uint8_t(shared_t[idx]));
+        lifted_s.push_back(field::lift_uint8_t(shared_s[idx]));
+        lifted_t.push_back(field::lift_uint8_t(shared_t[idx]));
       }
 
       // rearrange shares
-      vec_GF2E s_bar;
-      vec_GF2E t_bar;
-      s_bar.SetLength(instance.m2 + 1);
-      t_bar.SetLength(instance.m2 + 1);
+      std::vector<field::GF2E> s_bar;
+      std::vector<field::GF2E> t_bar;
+      s_bar.resize(instance.m2 + 1);
+      t_bar.resize(instance.m2 + 1);
 
       for (size_t j = 0; j < instance.m1; j++) {
         for (size_t k = 0; k < instance.m2; k++) {
-          s_bar[k] = r_ejs[repetition][j] * lifted_s[j + instance.m1 * k];
+          s_bar[k] = utils::ntl_to_custom(r_ejs[repetition][j]) *
+                     lifted_s[j + instance.m1 * k];
           t_bar[k] = lifted_t[j + instance.m1 * k];
         }
 
         // sample additional random points
         random_tapes[repetition][party].squeeze_bytes(
             lambda_sized_buffer.data(), lambda_sized_buffer.size());
-        s_bar[instance.m2] = utils::GF2E_from_bytes(lambda_sized_buffer);
+        s_bar[instance.m2].from_bytes(lambda_sized_buffer.data());
 
         random_tapes[repetition][party].squeeze_bytes(
             lambda_sized_buffer.data(), lambda_sized_buffer.size());
-        t_bar[instance.m2] = utils::GF2E_from_bytes(lambda_sized_buffer);
+        t_bar[instance.m2].from_bytes(lambda_sized_buffer.data());
 
         // interpolate polynomials S_ej^i and T_ej^i
         // S_eji[repetition][party][j] = utils::interpolate_with_precomputation(
@@ -518,10 +523,8 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     // compute product polynomial P_e
     GF2EX P;
     for (size_t j = 0; j < instance.m1; j++) {
-      vec_GF2E s_prime_sum;
-      vec_GF2E t_prime_sum;
-      s_prime_sum.SetLength(instance.m2 + 1);
-      t_prime_sum.SetLength(instance.m2 + 1);
+      std::vector<field::GF2E> s_prime_sum(instance.m2 + 1);
+      std::vector<field::GF2E> t_prime_sum(instance.m2 + 1);
       GF2EX S_sum;
       GF2EX T_sum;
 
@@ -531,10 +534,18 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         s_prime_sum += s_prime[repetition][party][j];
         t_prime_sum += t_prime[repetition][party][j];
       }
+      vec_GF2E s_prime_sum_ntl;
+      s_prime_sum_ntl.SetLength(instance.m2 + 1);
+      vec_GF2E t_prime_sum_ntl;
+      t_prime_sum_ntl.SetLength(instance.m2 + 1);
+      for (size_t k = 0; k <= instance.m2; k++) {
+        s_prime_sum_ntl[k] = utils::custom_to_ntl(s_prime_sum[k]);
+        t_prime_sum_ntl[k] = utils::custom_to_ntl(t_prime_sum[k]);
+      }
       S_sum = utils::interpolate_with_precomputation(
-          precomputation_for_zero_to_m2, s_prime_sum);
+          precomputation_for_zero_to_m2, s_prime_sum_ntl);
       T_sum = utils::interpolate_with_precomputation(
-          precomputation_for_zero_to_m2, t_prime_sum);
+          precomputation_for_zero_to_m2, t_prime_sum_ntl);
 
       P += S_sum * T_sum;
     }
@@ -609,14 +620,14 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   std::vector<std::vector<GF2E>> b(instance.num_rounds);
   std::vector<std::vector<std::vector<GF2E>>> b_shares(instance.num_rounds);
 
-  vec_GF2E lagrange_polys_evaluated_at_Re_m2;
+  std::vector<field::GF2E> lagrange_polys_evaluated_at_Re_m2;
   vec_GF2E lagrange_polys_evaluated_at_Re_2m2;
-  lagrange_polys_evaluated_at_Re_m2.SetLength(instance.m2 + 1);
+  lagrange_polys_evaluated_at_Re_m2.resize(instance.m2 + 1);
   lagrange_polys_evaluated_at_Re_2m2.SetLength(2 * instance.m2 + 1);
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     for (size_t k = 0; k < instance.m2 + 1; k++) {
-      lagrange_polys_evaluated_at_Re_m2[k] =
-          eval(precomputation_for_zero_to_m2[k], R_es[repetition]);
+      lagrange_polys_evaluated_at_Re_m2[k] = utils::ntl_to_custom(
+          eval(precomputation_for_zero_to_m2[k], R_es[repetition]));
     }
     for (size_t k = 0; k < 2 * instance.m2 + 1; k++) {
       lagrange_polys_evaluated_at_Re_2m2[k] =
@@ -637,10 +648,10 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         // eval(S_eji[repetition][party][j], R_es[repetition]);
         // b_shares[repetition][party][j] =
         // eval(T_eji[repetition][party][j], R_es[repetition]);
-        a_shares[repetition][party][j] =
-            lagrange_polys_evaluated_at_Re_m2 * s_prime[repetition][party][j];
-        b_shares[repetition][party][j] =
-            lagrange_polys_evaluated_at_Re_m2 * t_prime[repetition][party][j];
+        a_shares[repetition][party][j] = utils::custom_to_ntl(
+            lagrange_polys_evaluated_at_Re_m2 * s_prime[repetition][party][j]);
+        b_shares[repetition][party][j] = utils::custom_to_ntl(
+            lagrange_polys_evaluated_at_Re_m2 * t_prime[repetition][party][j]);
       }
       // compute c_e^i
       c_shares[repetition][party] =
