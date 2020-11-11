@@ -35,21 +35,14 @@ set(BANQUET_SRCS
 
 set(PCLMUL_FILES field.cpp)
 CHECK_CXX_COMPILER_FLAG(-mpclmul COMPILER_HAS_M_PCLMUL)
-if (COMPILER_HAS_M_PCLMUL)
-  message(
-    STATUS
-    "compiler has flag pclmul, setting compile flag for ${PCLMUL_FILES}"
-  )
-  set_source_files_properties(
-    ${PCLMUL_FILES}
-    PROPERTIES
-    COMPILE_OPTIONS
-    -mpclmul
-  )
+CHECK_CXX_COMPILER_FLAG(-msse2 COMPILER_HAS_M_SSE2)
+CHECK_CXX_COMPILER_FLAG(-msse4 COMPILER_HAS_M_SSE4)
+if (COMPILER_HAS_M_PCLMUL AND COMPILER_HAS_M_SSE2 AND COMPILER_HAS_M_SSE4)
+  add_compile_options(-mpclmul -msse2 -msse4)
 else()
   message(
     ERROR
-    "compiler does not have flag pclmul which is needed"  )
+    "compiler does not have at least one of flag (pclmul, sse2, sse4) which are needed"  )
 endif()
 
 add_library(banquet_static STATIC ${BANQUET_SRCS})

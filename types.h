@@ -7,7 +7,6 @@
 
 #include <NTL/GF2E.h>
 using namespace NTL;
-
 /* Prefix values for domain separation */
 constexpr uint8_t HASH_PREFIX_0 = 0;
 constexpr uint8_t HASH_PREFIX_1 = 1;
