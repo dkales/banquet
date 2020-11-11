@@ -25,10 +25,14 @@ class GF2E {
   static std::function<uint64_t(__m128i)> reduce;
 #pragma GCC diagnostic pop
   static size_t byte_size;
+  static uint64_t modulus;
 
 public:
   GF2E() : data(0){};
   GF2E(uint64_t data) : data(data) {}
+  GF2E(const GF2E &other) = default;
+  ~GF2E() = default;
+  GF2E &operator=(const GF2E &other) = default;
 
   void clear() { data = 0; }
   void set_coeff(size_t idx) { data |= (1ULL << idx); }
@@ -39,6 +43,7 @@ public:
   GF2E operator*(const GF2E &other) const;
   GF2E &operator*=(const GF2E &other);
   bool operator==(const GF2E &other) const;
+  bool operator!=(const GF2E &other) const;
 
   GF2E inverse() const;
 

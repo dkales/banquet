@@ -27,7 +27,7 @@ void init_lifting_lut(const field::GF2E &generator) {
 }
 
 inline __m128i clmul(uint64_t a, uint64_t b) {
-  return _mm_clmulepi64_si128(_mm_set1_epi64x(a), _mm_set1_epi64x(b), 0);
+  return _mm_clmulepi64_si128(_mm_set_epi64x(0, a), _mm_set_epi64x(0, b), 0);
 }
 
 uint64_t reduce_GF2_32(__m128i in) {
@@ -35,9 +35,9 @@ uint64_t reduce_GF2_32(__m128i in) {
   constexpr uint64_t P =
       (1ULL << 32) | (1ULL << 7) | (1ULL << 3) | (1ULL << 2) | (1ULL << 0);
   constexpr uint64_t mu = P;
-  uint64_t R = _mm_extract_epi64(in, 0);
-  uint64_t T1 = _mm_extract_epi64(clmul(R >> 32, mu), 0);
-  uint64_t T2 = _mm_extract_epi64(clmul(T1 >> 32, P), 0);
+  uint64_t R = _mm_cvtsi128_si64(in);
+  uint64_t T1 = _mm_cvtsi128_si64(clmul(R >> 32, mu));
+  uint64_t T2 = _mm_cvtsi128_si64(clmul(T1 >> 32, P));
   return 0xFFFFFFFFULL & (R ^ T2);
 }
 uint64_t reduce_GF2_40(__m128i in) {
@@ -70,14 +70,46 @@ uint64_t reduce_GF2_48(__m128i in) {
   return 0xFFFFFFFFFFFFFFULL & (R ^ T2);
 }
 
+uint64_t GF2_euclidean_div_quotient(uint64_t a, uint64_t b) {
+  uint64_t quotient = 0;
+  int diff = __builtin_clzl(b) - __builtin_clzl(a);
+  while (diff >= 0 && a != 0) {
+    quotient |= (1ULL << diff);
+    a ^= (b << diff);
+    diff = __builtin_clzl(b) - __builtin_clzl(a);
+  }
+  return quotient;
+}
+
+uint64_t mod_inverse(uint64_t a, uint64_t mod) {
+  uint64_t t = 0;
+  uint64_t new_t = 1;
+  uint64_t r = mod;
+  uint64_t new_r = a;
+  uint64_t tmp;
+
+  while (new_r != 0) {
+    uint64_t quotient = GF2_euclidean_div_quotient(r, new_r);
+    tmp = r;
+    r = new_r;
+    new_r = tmp ^ _mm_extract_epi64(clmul(quotient, new_r), 0);
+    tmp = t;
+    t = new_t;
+    new_t = tmp ^ _mm_extract_epi64(clmul(quotient, new_t), 0);
+  }
+
+  return t;
+}
+
 } // namespace
 
 namespace field {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wignored-attributes"
-std::function<uint64_t(__m128i)> GF2E::reduce = reduce_GF2_32;
+std::function<uint64_t(__m128i)> GF2E::reduce = nullptr;
 #pragma GCC diagnostic pop
-size_t GF2E::byte_size = 4;
+size_t GF2E::byte_size = 0;
+uint64_t GF2E::modulus = 0;
 
 GF2E GF2E::operator+(const GF2E &other) const {
   return GF2E(this->data ^ other.data);
@@ -103,8 +135,11 @@ GF2E &GF2E::operator*=(const GF2E &other) {
 bool GF2E::operator==(const GF2E &other) const {
   return this->data == other.data;
 }
+bool GF2E::operator!=(const GF2E &other) const {
+  return this->data != other.data;
+}
 
-GF2E GF2E::inverse() const { return *this; }
+GF2E GF2E::inverse() const { return GF2E(mod_inverse(this->data, modulus)); }
 
 void GF2E::to_bytes(uint8_t *out) const {
   uint64_t be_data = htole64(data);
@@ -126,6 +161,8 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
   switch (instance.lambda) {
   case 4: {
     // modulus = x^32 + x^7 + x^3 + x^2 + 1
+    modulus =
+        (1ULL << 32) | (1ULL << 7) | (1ULL << 3) | (1ULL << 2) | (1ULL << 0);
     reduce = reduce_GF2_32;
     byte_size = 4;
     // Ring morphism:
@@ -153,6 +190,8 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
   } break;
   case 5: {
     // modulus = x^40 + x^5 + x^4 + x^3 + 1
+    modulus =
+        (1ULL << 40) | (1ULL << 5) | (1ULL << 4) | (1ULL << 3) | (1ULL << 0);
     reduce = reduce_GF2_40;
     byte_size = 5;
     // Ring morphism:
@@ -179,6 +218,8 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
   } break;
   case 6: {
     // modulus = x^48 + x^5 + x^3 + x^2 + 1
+    modulus =
+        (1ULL << 48) | (1ULL << 5) | (1ULL << 3) | (1ULL << 2) | (1ULL << 0);
     reduce = reduce_GF2_48;
     byte_size = 6;
     // Ring morphism:
@@ -255,8 +296,7 @@ precompute_lagrange_polynomials(const std::vector<GF2E> &x_values) {
     }
     std::vector<GF2E> numerator = build_from_roots(x_except_k);
 
-    numerator = numerator *
-                utils::ntl_to_custom(inv(utils::custom_to_ntl(denominator)));
+    numerator = numerator * denominator.inverse();
     precomputed_lagrange_polynomials.push_back(numerator);
   }
 
@@ -340,6 +380,10 @@ field::GF2E dot_product(const std::vector<field::GF2E> &lhs,
 
   if (lhs.size() != rhs.size())
     throw std::runtime_error("adding vectors of different sizes");
+
+  // field::GF2E result;
+  // for (size_t i = 0; i < lhs.size(); i++)
+  // result += lhs[i] * rhs[i];
   __m128i accum = _mm_setzero_si128();
   for (size_t i = 0; i < lhs.size(); i++)
     accum = _mm_xor_si128(accum, clmul(lhs[i].data, rhs[i].data));

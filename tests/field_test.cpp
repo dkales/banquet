@@ -167,41 +167,76 @@ TEST_CASE("NTL to_bytes = custom to_bytes", "[field]") {
   REQUIRE(buffer_b == buffer_d);
 }
 TEST_CASE("NTL to custom conversion", "[field]") {
-  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
-  utils::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
-  field::GF2E a, b;
-  a.set_coeff(31);
-  a.set_coeff(29);
-  a.set_coeff(28);
-  a.set_coeff(24);
-  a.set_coeff(23);
-  a.set_coeff(21);
-  a.set_coeff(19);
-  a.set_coeff(15);
-  a.set_coeff(14);
-  a.set_coeff(9);
-  a.set_coeff(8);
-  a.set_coeff(0);
+  banquet_params_t params[] = {Banquet_L1_Param1, Banquet_L1_Param3,
+                               Banquet_L1_Param4};
+  for (auto param : params) {
+    utils::init_extension_field(banquet_instance_get(param));
+    field::GF2E::init_extension_field(banquet_instance_get(param));
+    field::GF2E a, b;
+    a.set_coeff(31);
+    a.set_coeff(29);
+    a.set_coeff(28);
+    a.set_coeff(24);
+    a.set_coeff(23);
+    a.set_coeff(21);
+    a.set_coeff(19);
+    a.set_coeff(15);
+    a.set_coeff(14);
+    a.set_coeff(9);
+    a.set_coeff(8);
+    a.set_coeff(0);
 
-  b.set_coeff(29);
-  b.set_coeff(27);
-  b.set_coeff(26);
-  b.set_coeff(25);
-  b.set_coeff(20);
-  b.set_coeff(17);
-  b.set_coeff(14);
-  b.set_coeff(11);
-  b.set_coeff(10);
-  b.set_coeff(5);
-  b.set_coeff(3);
-  b.set_coeff(2);
+    b.set_coeff(29);
+    b.set_coeff(27);
+    b.set_coeff(26);
+    b.set_coeff(25);
+    b.set_coeff(20);
+    b.set_coeff(17);
+    b.set_coeff(14);
+    b.set_coeff(11);
+    b.set_coeff(10);
+    b.set_coeff(5);
+    b.set_coeff(3);
+    b.set_coeff(2);
 
-  field::GF2E ab = a * b;
-  GF2E a_ntl = utils::custom_to_ntl(a);
-  GF2E ab_ntl = utils::custom_to_ntl(ab);
-  GF2E b_ntl = ab_ntl / a_ntl;
-  field::GF2E b2 = utils::ntl_to_custom(b_ntl);
-  REQUIRE(b == b2);
+    field::GF2E ab = a * b;
+    GF2E a_ntl = utils::custom_to_ntl(a);
+    GF2E ab_ntl = utils::custom_to_ntl(ab);
+    GF2E b_ntl = ab_ntl / a_ntl;
+    field::GF2E b2 = utils::ntl_to_custom(b_ntl);
+    REQUIRE(b == b2);
+  }
+}
+TEST_CASE("NTL inverse == custom", "[field]") {
+  banquet_params_t params[] = {Banquet_L1_Param1, Banquet_L1_Param3,
+                               Banquet_L1_Param4};
+  for (auto param : params) {
+    utils::init_extension_field(banquet_instance_get(param));
+    field::GF2E::init_extension_field(banquet_instance_get(param));
+    field::GF2E a;
+    a.set_coeff(31);
+    a.set_coeff(29);
+    a.set_coeff(28);
+    a.set_coeff(24);
+    a.set_coeff(23);
+    a.set_coeff(21);
+    a.set_coeff(19);
+    a.set_coeff(15);
+    a.set_coeff(14);
+    a.set_coeff(9);
+    a.set_coeff(8);
+    a.set_coeff(0);
+
+    field::GF2E b = a.inverse();
+    field::GF2E c = utils::ntl_to_custom(inv(utils::custom_to_ntl(a)));
+    std::cout << utils::custom_to_ntl(a) << ", " << utils::custom_to_ntl(b)
+              << ", " << utils::custom_to_ntl(c) << "\n";
+    std::cout << utils::custom_to_ntl(a * b) << ", "
+              << utils::custom_to_ntl(a * c) << ", "
+              << utils::custom_to_ntl(a) * utils::custom_to_ntl(c) << "\n";
+    REQUIRE(b == c);
+    REQUIRE(a * b == field::GF2E(1));
+  }
 }
 TEST_CASE("NTL interpolation == custom", "[field]") {
   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
