@@ -75,6 +75,7 @@ namespace field {
 #pragma GCC diagnostic ignored "-Wignored-attributes"
 std::function<uint64_t(__m128i)> GF2E::reduce = reduce_GF2_32;
 #pragma GCC diagnostic pop
+size_t GF2E::byte_size = 4;
 
 GF2E GF2E::operator+(const GF2E &other) const {
   return GF2E(this->data ^ other.data);
@@ -88,10 +89,11 @@ bool GF2E::operator==(const GF2E &other) const {
 
 void GF2E::to_bytes(uint8_t *out) const {
   uint64_t be_data = htole64(data);
-  memcpy(out, (uint8_t *)(&be_data), sizeof(be_data));
+  memcpy(out, (uint8_t *)(&be_data), byte_size);
 }
 void GF2E::from_bytes(uint8_t *in) {
-  memcpy((uint8_t *)(&data), in, sizeof(data));
+  data = 0;
+  memcpy((uint8_t *)(&data), in, byte_size);
   data = le64toh(data);
 }
 
@@ -100,6 +102,7 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
   case 4: {
     // modulus = x^32 + x^7 + x^3 + x^2 + 1
     reduce = reduce_GF2_32;
+    byte_size = 4;
     // Ring morphism:
     //   From: Finite Field in x of size 2^8
     //   To:   Finite Field in y of size 2^32
@@ -126,6 +129,7 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
   case 5: {
     // modulus = x^40 + x^5 + x^4 + x^3 + 1
     reduce = reduce_GF2_40;
+    byte_size = 5;
     // Ring morphism:
     //   From: Finite Field in x of size 2^8
     //   To:   Finite Field in y of size 2^40
@@ -151,6 +155,7 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
   case 6: {
     // modulus = x^48 + x^5 + x^3 + x^2 + 1
     reduce = reduce_GF2_48;
+    byte_size = 6;
     // Ring morphism:
     //   From: Finite Field in x of size 2^8
     //   To:   Finite Field in y of size 2^48

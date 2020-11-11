@@ -16,6 +16,7 @@ class GF2E {
 #pragma GCC diagnostic ignored "-Wignored-attributes"
   static std::function<uint64_t(__m128i)> reduce;
 #pragma GCC diagnostic pop
+  static size_t byte_size;
 
 public:
   GF2E() : data(0){};

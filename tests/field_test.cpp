@@ -151,15 +151,15 @@ TEST_CASE("NTL to_bytes = custom to_bytes", "[field]") {
   GF2E d_e = conv<GF2E>(d);
 
   const GF2X &poly_rep_c = rep(c_e);
-  std::vector<uint8_t> buffer_c(8);
+  std::vector<uint8_t> buffer_c(4);
   BytesFromGF2X(buffer_c.data(), poly_rep_c, buffer_c.size());
   const GF2X &poly_rep_d = rep(d_e);
-  std::vector<uint8_t> buffer_d(8);
+  std::vector<uint8_t> buffer_d(4);
   BytesFromGF2X(buffer_d.data(), poly_rep_d, buffer_d.size());
 
-  std::vector<uint8_t> buffer_a(8);
+  std::vector<uint8_t> buffer_a(4);
   a.to_bytes(buffer_a.data());
-  std::vector<uint8_t> buffer_b(8);
+  std::vector<uint8_t> buffer_b(4);
   b.to_bytes(buffer_b.data());
   REQUIRE(buffer_a == buffer_c);
   REQUIRE(buffer_b == buffer_d);
