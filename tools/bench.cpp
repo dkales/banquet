@@ -81,7 +81,6 @@ static void bench_sign_and_verify(const bench_options_t *options) {
         banquet_verify(instance, keypair.second, deserialized, m, sizeof(m));
     tmp_time = timing_read(&ctx);
     timing.verify = tmp_time - start_time;
-    std::cout << "\n";
     if (!ok)
       std::cerr << "failed to verify signature" << std::endl;
   }

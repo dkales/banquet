@@ -4,10 +4,11 @@
 #include "field.h"
 #include "tape.h"
 #include "tree.h"
-#include "utils.h"
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+// TODO: remove after debug
+#include <iostream>
 
 extern "C" {
 #include "kdf_shake.h"
@@ -71,7 +72,7 @@ std::vector<uint8_t> phase_1_commitment(
     const std::vector<std::vector<std::vector<uint8_t>>> &commitments,
     const std::vector<std::vector<uint8_t>> &key_deltas,
     const std::vector<std::vector<uint8_t>> &t_deltas,
-    utils::RepByteContainer &output_broadcasts) {
+    RepByteContainer &output_broadcasts) {
 
   hash_context ctx;
   hash_init_prefix(&ctx, instance.digest_size, HASH_PREFIX_1);
@@ -267,7 +268,6 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
                                  const banquet_keypair_t &keypair,
                                  const uint8_t *message, size_t message_len) {
   // init modulus of extension field F_{2^{8\lambda}}
-  utils::init_extension_field(instance);
   field::GF2E::init_extension_field(instance);
 
   // grab aes key, pt and ct
@@ -333,18 +333,16 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   /////////////////////////////////////////////////////////////////////////////
   // phase 1: commit to executions of AES
   /////////////////////////////////////////////////////////////////////////////
-  utils::RepByteContainer rep_shared_keys(instance.num_rounds,
-                                          instance.num_MPC_parties,
-                                          instance.aes_params.key_size);
-  utils::RepByteContainer rep_output_broadcasts(
+  RepByteContainer rep_shared_keys(instance.num_rounds,
+                                   instance.num_MPC_parties,
+                                   instance.aes_params.key_size);
+  RepByteContainer rep_output_broadcasts(
       instance.num_rounds, instance.num_MPC_parties,
       instance.aes_params.block_size * instance.aes_params.num_blocks);
-  utils::RepByteContainer rep_shared_s(instance.num_rounds,
-                                       instance.num_MPC_parties,
-                                       instance.aes_params.num_sboxes);
-  utils::RepByteContainer rep_shared_t(instance.num_rounds,
-                                       instance.num_MPC_parties,
-                                       instance.aes_params.num_sboxes);
+  RepByteContainer rep_shared_s(instance.num_rounds, instance.num_MPC_parties,
+                                instance.aes_params.num_sboxes);
+  RepByteContainer rep_shared_t(instance.num_rounds, instance.num_MPC_parties,
+                                instance.aes_params.num_sboxes);
   std::vector<std::vector<uint8_t>> rep_key_deltas;
   std::vector<std::vector<uint8_t>> rep_t_deltas;
 
@@ -712,7 +710,6 @@ bool banquet_verify(const banquet_instance_t &instance,
                     const uint8_t *message, size_t message_len) {
 
   // init modulus of extension field F_{2^{8\lambda}}
-  utils::init_extension_field(instance);
   field::GF2E::init_extension_field(instance);
 
   std::vector<uint8_t> pt(instance.aes_params.block_size *
@@ -791,17 +788,14 @@ bool banquet_verify(const banquet_instance_t &instance,
   /////////////////////////////////////////////////////////////////////////////
   // recompute commitments to executions of AES
   /////////////////////////////////////////////////////////////////////////////
-  // TODO allocate once for all reps, make nice interface
-  utils::RepByteContainer rep_shared_keys(instance.num_rounds,
-                                          instance.num_MPC_parties,
-                                          instance.aes_params.key_size);
-  utils::RepByteContainer rep_shared_s(instance.num_rounds,
-                                       instance.num_MPC_parties,
-                                       instance.aes_params.num_sboxes);
-  utils::RepByteContainer rep_shared_t(instance.num_rounds,
-                                       instance.num_MPC_parties,
-                                       instance.aes_params.num_sboxes);
-  utils::RepByteContainer rep_output_broadcasts(
+  RepByteContainer rep_shared_keys(instance.num_rounds,
+                                   instance.num_MPC_parties,
+                                   instance.aes_params.key_size);
+  RepByteContainer rep_shared_s(instance.num_rounds, instance.num_MPC_parties,
+                                instance.aes_params.num_sboxes);
+  RepByteContainer rep_shared_t(instance.num_rounds, instance.num_MPC_parties,
+                                instance.aes_params.num_sboxes);
+  RepByteContainer rep_output_broadcasts(
       instance.num_rounds, instance.num_MPC_parties,
       instance.aes_params.block_size * instance.aes_params.num_blocks);
 

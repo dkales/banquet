@@ -2,7 +2,7 @@
 #include <catch2/catch.hpp>
 
 #include "../field.h"
-#include "../utils.h"
+#include "utils.h"
 
 #include <NTL/GF2EX.h>
 

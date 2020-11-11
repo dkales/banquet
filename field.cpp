@@ -1,6 +1,5 @@
 #include "field.h"
 
-#include "utils.h"
 #include <cstring>
 #include <stdexcept>
 
