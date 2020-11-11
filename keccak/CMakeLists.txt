@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.4.1)
-project(Keccak C)
+project(Keccak C ASM)
 
 set(KECCAK_SRCS
   KeccakSpongeWidth1600.c
@@ -21,7 +21,7 @@ if (USE_AVX2)
   set(KECCAK_SRCS ${KECCAK_SRCS}
     avx2/KeccakP-1600-AVX2.s
     )
-  set_property(SOURCE avx2/KeccakP-1600-AVX2.s PROPERTY LANGUAGE C)
+  set_property(SOURCE avx2/KeccakP-1600-AVX2.s PROPERTY COMPILE_FLAGS "-x assembler-with-cpp")
 else ()
   set(KECCAK_SRCS ${KECCAK_SRCS}
     opt64/KeccakP-1600-opt64.c
