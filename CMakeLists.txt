@@ -32,6 +32,7 @@ set(BANQUET_SRCS
 
 add_library(banquet_static STATIC ${BANQUET_SRCS})
 target_link_libraries(banquet_static PUBLIC keccak ${NTL_LIBRARY}  ${GMP_LIBRARIES} Threads::Threads)
+target_include_directories(banquet_static PUBLIC ${NTL_INCLUDE_DIR})
 
 add_library(bench_utils STATIC tools/bench_utils.cpp tools/bench_timing.cpp)
 add_executable(bench tools/bench.cpp)
