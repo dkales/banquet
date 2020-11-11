@@ -4,6 +4,8 @@
 #include "../field.h"
 #include "../utils.h"
 
+#include <NTL/GF2EX.h>
+
 TEST_CASE("Basic Arithmetic in all fields", "[field]") {
   banquet_params_t params[] = {Banquet_L1_Param1, Banquet_L1_Param3,
                                Banquet_L1_Param4};
@@ -200,4 +202,32 @@ TEST_CASE("NTL to custom conversion", "[field]") {
   GF2E b_ntl = ab_ntl / a_ntl;
   field::GF2E b2 = utils::ntl_to_custom(b_ntl);
   REQUIRE(b == b2);
+}
+TEST_CASE("NTL interpolation == custom", "[field]") {
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
+  utils::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
+
+  std::vector<field::GF2E> a = field::get_first_n_field_elements(100);
+  vec_GF2E b = utils::get_first_n_field_elements(100);
+  for (size_t i = 0; i < 100; i++) {
+    REQUIRE(a[i] == utils::ntl_to_custom(b[i]));
+  }
+  std::vector<field::GF2E> a_from_roots = field::build_from_roots(a);
+  GF2EX b_from_roots = BuildFromRoots(b);
+  REQUIRE(a_from_roots.size() == b_from_roots.rep.length());
+  for (size_t j = 0; j < a_from_roots.size(); j++) {
+    REQUIRE(a_from_roots[j] == utils::ntl_to_custom(b_from_roots[j]));
+  }
+
+  std::vector<std::vector<field::GF2E>> a_lag =
+      field::precompute_lagrange_polynomials(a);
+  std::vector<GF2EX> b_lag = utils::precompute_lagrange_polynomials(b);
+
+  REQUIRE(a_lag.size() == b_lag.size());
+  for (size_t i = 0; i < a_lag.size(); i++) {
+    REQUIRE(a_lag[i].size() == b_lag[i].rep.length());
+    for (size_t j = 0; j < a_lag[i].size(); j++) {
+      REQUIRE(a_lag[i][j] == utils::ntl_to_custom(b_lag[i][j]));
+    }
+  }
 }

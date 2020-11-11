@@ -1,7 +1,9 @@
 #include "field.h"
 
+#include "utils.h"
 #include <cstring>
 #include <stdexcept>
+
 extern "C" {
 #include "endian_compat.h"
 }
@@ -84,12 +86,25 @@ GF2E &GF2E::operator+=(const GF2E &other) {
   this->data ^= other.data;
   return *this;
 }
+GF2E GF2E::operator-(const GF2E &other) const {
+  return GF2E(this->data ^ other.data);
+}
+GF2E &GF2E::operator-=(const GF2E &other) {
+  this->data ^= other.data;
+  return *this;
+}
 GF2E GF2E::operator*(const GF2E &other) const {
   return GF2E(reduce(clmul(this->data, other.data)));
+}
+GF2E &GF2E::operator*=(const GF2E &other) {
+  this->data = reduce(clmul(this->data, other.data));
+  return *this;
 }
 bool GF2E::operator==(const GF2E &other) const {
   return this->data == other.data;
 }
+
+GF2E GF2E::inverse() const { return *this; }
 
 void GF2E::to_bytes(uint8_t *out) const {
   uint64_t be_data = htole64(data);
@@ -220,15 +235,23 @@ precompute_lagrange_polynomials(const std::vector<GF2E> &x_values) {
   std::vector<std::vector<GF2E>> precomputed_lagrange_polynomials;
   precomputed_lagrange_polynomials.reserve(m);
 
-  // std::vector<GF2E> full_poly = build_from_roots(x_values);
-  std::vector<GF2E> lagrange_poly;
-  std::vector<GF2E> missing_term;
-  // SetX(missing_term);
+  std::vector<GF2E> x_except_k;
+  GF2E denominator;
   for (size_t k = 0; k < m; k++) {
-    // SetCoeff(missing_term, 0, -x_values[k]);
-    // lagrange_poly = full_poly / missing_term;
-    // lagrange_poly = lagrange_poly / eval(lagrange_poly, x_values[k]);
-    precomputed_lagrange_polynomials.push_back(lagrange_poly);
+    denominator = GF2E(1);
+    x_except_k.clear();
+    x_except_k.reserve(m - 1);
+    for (size_t j = 0; j < m; j++) {
+      if (k != j) {
+        denominator *= x_values[k] - x_values[j];
+        x_except_k.push_back(x_values[j]);
+      }
+    }
+    std::vector<GF2E> numerator = build_from_roots(x_except_k);
+
+    numerator = numerator *
+                utils::ntl_to_custom(inv(utils::custom_to_ntl(denominator)));
+    precomputed_lagrange_polynomials.push_back(numerator);
   }
 
   return precomputed_lagrange_polynomials;
@@ -237,17 +260,49 @@ precompute_lagrange_polynomials(const std::vector<GF2E> &x_values) {
 std::vector<GF2E> interpolate_with_precomputation(
     const std::vector<std::vector<GF2E>> &precomputed_lagrange_polynomials,
     const std::vector<GF2E> &y_values) {
-  if (precomputed_lagrange_polynomials.size() != y_values.size())
+  if (precomputed_lagrange_polynomials.size() != y_values.size() ||
+      y_values.empty())
     throw std::runtime_error("invalid sizes for interpolation");
 
-  std::vector<GF2E> res;
+  std::vector<GF2E> res(precomputed_lagrange_polynomials[0].size());
   size_t m = y_values.size();
   for (size_t k = 0; k < m; k++) {
-    // todo vector * const mul
-    // res += precomputed_lagrange_polynomials[k] * y_values[k];
+    res += precomputed_lagrange_polynomials[k] * y_values[k];
   }
   return res;
 }
+
+std::vector<GF2E> build_from_roots(const std::vector<GF2E> &roots) {
+  size_t len = roots.size();
+
+  std::vector<GF2E> poly(roots);
+  poly.push_back(GF2E(0));
+
+  GF2E tmp;
+  for (size_t k = 1; k < len; k++) {
+    tmp = poly[k];
+    poly[k] = tmp + poly[k - 1];
+    for (size_t i = k - 1; i >= 1; i--) {
+      poly[i] = poly[i] * tmp + poly[i - 1];
+    }
+    poly[0] *= tmp;
+  }
+  poly[len] = GF2E(1);
+  return poly;
+}
+// horner eval
+GF2E eval(const std::vector<GF2E> &poly, const GF2E &point) {
+  GF2E acc;
+  long i;
+
+  for (i = poly.size() - 1; i >= 0; i--) {
+    acc *= point;
+    acc += poly[i];
+  }
+
+  return acc;
+}
+
 } // namespace field
 
 std::vector<field::GF2E> operator+(const std::vector<field::GF2E> &lhs,
@@ -274,8 +329,8 @@ std::vector<field::GF2E> &operator+=(std::vector<field::GF2E> &lhs,
 }
 
 // somewhat optimized inner product, only do one lazy reduction
-field::GF2E operator*(const std::vector<field::GF2E> &lhs,
-                      const std::vector<field::GF2E> &rhs) {
+field::GF2E dot_product(const std::vector<field::GF2E> &lhs,
+                        const std::vector<field::GF2E> &rhs) {
 
   if (lhs.size() != rhs.size())
     throw std::runtime_error("adding vectors of different sizes");
@@ -284,5 +339,26 @@ field::GF2E operator*(const std::vector<field::GF2E> &lhs,
     accum = _mm_xor_si128(accum, clmul(lhs[i].data, rhs[i].data));
 
   field::GF2E result(field::GF2E::reduce(accum));
+  return result;
+}
+
+std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
+                                   const field::GF2E &rhs) {
+  std::vector<field::GF2E> result(lhs);
+  for (size_t i = 0; i < lhs.size(); i++)
+    result[i] *= rhs;
+
+  return result;
+}
+
+// naive polynomial multiplication
+std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
+                                   const std::vector<field::GF2E> &rhs) {
+
+  std::vector<field::GF2E> result(lhs.size() + rhs.size() - 1);
+  for (size_t i = 0; i < lhs.size(); i++)
+    for (size_t j = 0; j < rhs.size(); j++)
+      result[i + j] += lhs[i] * rhs[j];
+
   return result;
 }

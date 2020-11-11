@@ -440,10 +440,10 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   /////////////////////////////////////////////////////////////////////////////
 
   // a vector of the first m2+1 field elements for interpolation
-  vec_GF2E x_values_for_interpolation_zero_to_m2 =
-      utils::get_first_n_field_elements(instance.m2 + 1);
-  std::vector<GF2EX> precomputation_for_zero_to_m2 =
-      utils::precompute_lagrange_polynomials(
+  std::vector<field::GF2E> x_values_for_interpolation_zero_to_m2 =
+      field::get_first_n_field_elements(instance.m2 + 1);
+  std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_m2 =
+      field::precompute_lagrange_polynomials(
           x_values_for_interpolation_zero_to_m2);
   vec_GF2E x_values_for_interpolation_zero_to_2m2 =
       utils::get_first_n_field_elements(2 * instance.m2 + 1);
@@ -457,8 +457,9 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       instance.num_rounds);
   // std::vector<std::vector<std::vector<GF2EX>>> S_eji(instance.num_rounds);
   // std::vector<std::vector<std::vector<GF2EX>>> T_eji(instance.num_rounds);
-  std::vector<GF2EX> P_e(instance.num_rounds);
-  std::vector<std::vector<vec_GF2E>> P_e_shares(instance.num_rounds);
+  std::vector<std::vector<field::GF2E>> P_e(instance.num_rounds);
+  std::vector<std::vector<std::vector<field::GF2E>>> P_e_shares(
+      instance.num_rounds);
   // std::vector<std::vector<GF2EX>> P_ei(instance.num_rounds);
   std::vector<std::vector<GF2E>> P_deltas(instance.num_rounds);
 
@@ -521,12 +522,12 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     }
 
     // compute product polynomial P_e
-    GF2EX P;
+    std::vector<field::GF2E> P(2 * instance.m2 + 1);
     for (size_t j = 0; j < instance.m1; j++) {
       std::vector<field::GF2E> s_prime_sum(instance.m2 + 1);
       std::vector<field::GF2E> t_prime_sum(instance.m2 + 1);
-      GF2EX S_sum;
-      GF2EX T_sum;
+      std::vector<field::GF2E> S_sum;
+      std::vector<field::GF2E> T_sum;
 
       for (size_t party = 0; party < instance.num_MPC_parties; party++) {
         // S_sum += S_eji[repetition][party][j];
@@ -534,40 +535,32 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         s_prime_sum += s_prime[repetition][party][j];
         t_prime_sum += t_prime[repetition][party][j];
       }
-      vec_GF2E s_prime_sum_ntl;
-      s_prime_sum_ntl.SetLength(instance.m2 + 1);
-      vec_GF2E t_prime_sum_ntl;
-      t_prime_sum_ntl.SetLength(instance.m2 + 1);
-      for (size_t k = 0; k <= instance.m2; k++) {
-        s_prime_sum_ntl[k] = utils::custom_to_ntl(s_prime_sum[k]);
-        t_prime_sum_ntl[k] = utils::custom_to_ntl(t_prime_sum[k]);
-      }
-      S_sum = utils::interpolate_with_precomputation(
-          precomputation_for_zero_to_m2, s_prime_sum_ntl);
-      T_sum = utils::interpolate_with_precomputation(
-          precomputation_for_zero_to_m2, t_prime_sum_ntl);
+      S_sum = field::interpolate_with_precomputation(
+          precomputation_for_zero_to_m2, s_prime_sum);
+      T_sum = field::interpolate_with_precomputation(
+          precomputation_for_zero_to_m2, t_prime_sum);
 
       P += S_sum * T_sum;
     }
     P_e[repetition] = P;
 
     // compute sharing of P
-    std::vector<vec_GF2E> &P_shares = P_e_shares[repetition];
+    std::vector<std::vector<field::GF2E>> &P_shares = P_e_shares[repetition];
     P_shares.resize(instance.num_MPC_parties);
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       // first m2 points: first party = sum of r_e,j, other parties = 0
-      P_shares[party].SetLength(2 * instance.m2 + 1);
+      P_shares[party].resize(2 * instance.m2 + 1);
       if (party == 0) {
-        GF2E sum_r;
+        field::GF2E sum_r;
         for (size_t j = 0; j < instance.m1; j++) {
-          sum_r += r_ejs[repetition][j];
+          sum_r += utils::ntl_to_custom(r_ejs[repetition][j]);
         }
         for (size_t k = 0; k < instance.m2; k++) {
           P_shares[party][k] = sum_r;
         }
       } else {
         for (size_t k = 0; k < instance.m2; k++) {
-          P_shares[party][k] = GF2E::zero();
+          P_shares[party][k] = field::GF2E(0);
         }
       }
 
@@ -575,17 +568,19 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
         random_tapes[repetition][party].squeeze_bytes(
             lambda_sized_buffer.data(), lambda_sized_buffer.size());
-        P_shares[party][k] = utils::GF2E_from_bytes(lambda_sized_buffer);
+        P_shares[party][k].from_bytes(lambda_sized_buffer.data());
       }
     }
     for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
       // calculate offset
-      GF2E k_element = x_values_for_interpolation_zero_to_2m2[k];
-      GF2E P_at_k_delta = eval(P, k_element);
+      field::GF2E k_element =
+          utils::ntl_to_custom(x_values_for_interpolation_zero_to_2m2[k]);
+      field::GF2E P_at_k_delta = field::eval(P, k_element);
       for (size_t party = 0; party < instance.num_MPC_parties; party++) {
         P_at_k_delta -= P_shares[party][k];
       }
-      P_deltas[repetition][k - instance.m2] = P_at_k_delta;
+      P_deltas[repetition][k - instance.m2] =
+          utils::custom_to_ntl(P_at_k_delta);
       // adjust first share
       P_shares[0][k] += P_at_k_delta;
     }
@@ -621,17 +616,18 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   std::vector<std::vector<std::vector<GF2E>>> b_shares(instance.num_rounds);
 
   std::vector<field::GF2E> lagrange_polys_evaluated_at_Re_m2;
-  vec_GF2E lagrange_polys_evaluated_at_Re_2m2;
+  std::vector<field::GF2E> lagrange_polys_evaluated_at_Re_2m2;
   lagrange_polys_evaluated_at_Re_m2.resize(instance.m2 + 1);
-  lagrange_polys_evaluated_at_Re_2m2.SetLength(2 * instance.m2 + 1);
+  lagrange_polys_evaluated_at_Re_2m2.resize(2 * instance.m2 + 1);
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     for (size_t k = 0; k < instance.m2 + 1; k++) {
-      lagrange_polys_evaluated_at_Re_m2[k] = utils::ntl_to_custom(
-          eval(precomputation_for_zero_to_m2[k], R_es[repetition]));
+      lagrange_polys_evaluated_at_Re_m2[k] =
+          eval(precomputation_for_zero_to_m2[k],
+               utils::ntl_to_custom(R_es[repetition]));
     }
     for (size_t k = 0; k < 2 * instance.m2 + 1; k++) {
-      lagrange_polys_evaluated_at_Re_2m2[k] =
-          eval(precomputation_for_zero_to_2m2[k], R_es[repetition]);
+      lagrange_polys_evaluated_at_Re_2m2[k] = utils::ntl_to_custom(
+          eval(precomputation_for_zero_to_2m2[k], R_es[repetition]));
     }
 
     c_shares[repetition].resize(instance.num_MPC_parties);
@@ -648,14 +644,14 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         // eval(S_eji[repetition][party][j], R_es[repetition]);
         // b_shares[repetition][party][j] =
         // eval(T_eji[repetition][party][j], R_es[repetition]);
-        a_shares[repetition][party][j] = utils::custom_to_ntl(
-            lagrange_polys_evaluated_at_Re_m2 * s_prime[repetition][party][j]);
-        b_shares[repetition][party][j] = utils::custom_to_ntl(
-            lagrange_polys_evaluated_at_Re_m2 * t_prime[repetition][party][j]);
+        a_shares[repetition][party][j] = utils::custom_to_ntl(dot_product(
+            lagrange_polys_evaluated_at_Re_m2, s_prime[repetition][party][j]));
+        b_shares[repetition][party][j] = utils::custom_to_ntl(dot_product(
+            lagrange_polys_evaluated_at_Re_m2, t_prime[repetition][party][j]));
       }
       // compute c_e^i
-      c_shares[repetition][party] =
-          lagrange_polys_evaluated_at_Re_2m2 * P_e_shares[repetition][party];
+      c_shares[repetition][party] = utils::custom_to_ntl(dot_product(
+          lagrange_polys_evaluated_at_Re_2m2, P_e_shares[repetition][party]));
     }
     // open c_e and a,b values
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
