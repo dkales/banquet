@@ -16,6 +16,8 @@ set(BUILD_TESTS OFF CACHE BOOL "Build unit tests.")
 
 SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
+add_compile_options("-Wall")
+
 add_subdirectory(keccak)
 
 set(BANQUET_SRCS

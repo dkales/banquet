@@ -187,7 +187,7 @@ std::vector<GF2EX> precompute_lagrange_polynomials(const vec_GF2E &x_values) {
 GF2EX interpolate_with_precomputation(
     const std::vector<GF2EX> &precomputed_lagrange_polynomials,
     const vec_GF2E &y_values) {
-  if (precomputed_lagrange_polynomials.size() != y_values.length())
+  if (precomputed_lagrange_polynomials.size() != (size_t)y_values.length())
     throw std::runtime_error("invalid sizes for interpolation");
 
   GF2EX res;

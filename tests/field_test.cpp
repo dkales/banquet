@@ -249,7 +249,7 @@ TEST_CASE("NTL interpolation == custom", "[field]") {
   }
   std::vector<field::GF2E> a_from_roots = field::build_from_roots(a);
   GF2EX b_from_roots = BuildFromRoots(b);
-  REQUIRE(a_from_roots.size() == b_from_roots.rep.length());
+  REQUIRE(a_from_roots.size() == (size_t)b_from_roots.rep.length());
   for (size_t j = 0; j < a_from_roots.size(); j++) {
     REQUIRE(a_from_roots[j] == utils::ntl_to_custom(b_from_roots[j]));
   }
@@ -260,7 +260,7 @@ TEST_CASE("NTL interpolation == custom", "[field]") {
 
   REQUIRE(a_lag.size() == b_lag.size());
   for (size_t i = 0; i < a_lag.size(); i++) {
-    REQUIRE(a_lag[i].size() == b_lag[i].rep.length());
+    REQUIRE(a_lag[i].size() == (size_t)b_lag[i].rep.length());
     for (size_t j = 0; j < a_lag[i].size(); j++) {
       REQUIRE(a_lag[i][j] == utils::ntl_to_custom(b_lag[i][j]));
     }

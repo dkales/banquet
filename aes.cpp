@@ -43,8 +43,6 @@ unsigned char bytesub_save(unsigned char c, std::pair<uint8_t, uint8_t> &save) {
   unsigned char c63 = multiply(square(square(square(c7))), c7);
   unsigned char c127 = multiply(square(c63), c);
   unsigned char c254 = square(c127);
-  unsigned char f[8];
-  unsigned char h[8];
   save.first = c;
   save.second = c254;
 
@@ -451,7 +449,7 @@ static bool aes_192_save_sbox_state(
       expanded[i][j] = temp[i] ^ expanded[i][j - 6];
   }
 
-  for (int k = 0; k < AES192::NUM_BLOCKS; k++) {
+  for (size_t k = 0; k < AES192::NUM_BLOCKS; k++) {
     for (j = 0; j < 4; ++j)
       for (i = 0; i < 4; ++i)
         state[i][j] =
@@ -575,7 +573,7 @@ void aes_192_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
       }
   }
 
-  for (int k = 0; k < AES192::NUM_BLOCKS; k++) {
+  for (size_t k = 0; k < AES192::NUM_BLOCKS; k++) {
     for (j = 0; j < 4; ++j)
       for (i = 0; i < 4; ++i) {
         state[first_party][i][j] =
@@ -756,7 +754,7 @@ bool aes_256_save_sbox_state(
       expanded[i][j] = temp[i] ^ expanded[i][j - 8];
   }
 
-  for (int k = 0; k < AES256::NUM_BLOCKS; k++) {
+  for (size_t k = 0; k < AES256::NUM_BLOCKS; k++) {
     for (j = 0; j < 4; ++j)
       for (i = 0; i < 4; ++i)
         state[i][j] =
@@ -892,8 +890,7 @@ void aes_256_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
       }
   }
 
-  for (int k = 0; k < AES256::NUM_BLOCKS; k++) {
-    // second pt
+  for (size_t k = 0; k < AES256::NUM_BLOCKS; k++) {
     for (j = 0; j < 4; ++j)
       for (i = 0; i < 4; ++i) {
         state[first_party][i][j] =

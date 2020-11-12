@@ -31,7 +31,7 @@ inline __m128i clmul(uint64_t a, uint64_t b) {
 }
 
 // actually a bit slowerthan naive version below
-uint64_t reduce_GF2_32_barret(__m128i in) {
+__attribute__((unused)) uint64_t reduce_GF2_32_barret(__m128i in) {
   // modulus = x^32 + x^7 + x^3 + x^2 + 1
   constexpr uint64_t P =
       (1ULL << 32) | (1ULL << 7) | (1ULL << 3) | (1ULL << 2) | (1ULL << 0);
