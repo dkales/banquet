@@ -1,9 +1,9 @@
 #pragma once
 
+#include "gsl-lite.hpp"
 #include "types.h"
 #include <array>
 #include <cstdint>
-#include <span>
 #include <vector>
 
 namespace AES128 {
@@ -21,11 +21,11 @@ aes_128_with_sbox_output(const std::vector<uint8_t> &key_in,
                          const std::vector<uint8_t> &plaintext_in,
                          std::vector<uint8_t> &ciphertext_out);
 
-void aes_128_s_shares(const std::vector<std::span<uint8_t>> &key_in,
-                      const std::vector<std::span<uint8_t>> &t_shares,
+void aes_128_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
+                      const std::vector<gsl::span<uint8_t>> &t_shares,
                       const std::vector<uint8_t> &plaintext_in,
-                      std::vector<std::span<uint8_t>> &ciphertext_shares_out,
-                      std::vector<std::span<uint8_t>> &s_shares_out);
+                      std::vector<gsl::span<uint8_t>> &ciphertext_shares_out,
+                      std::vector<gsl::span<uint8_t>> &s_shares_out);
 
 } // namespace AES128
 
@@ -44,11 +44,11 @@ aes_192_with_sbox_output(const std::vector<uint8_t> &key_in,
                          const std::vector<uint8_t> &plaintext_in,
                          std::vector<uint8_t> &ciphertext_out);
 
-void aes_192_s_shares(const std::vector<std::span<uint8_t>> &key_in,
-                      const std::vector<std::span<uint8_t>> &t_shares,
+void aes_192_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
+                      const std::vector<gsl::span<uint8_t>> &t_shares,
                       const std::vector<uint8_t> &plaintext_in,
-                      std::vector<std::span<uint8_t>> &ciphertext_shares_out,
-                      std::vector<std::span<uint8_t>> &s_shares_out);
+                      std::vector<gsl::span<uint8_t>> &ciphertext_shares_out,
+                      std::vector<gsl::span<uint8_t>> &s_shares_out);
 
 } // namespace AES192
 
@@ -67,10 +67,10 @@ aes_256_with_sbox_output(const std::vector<uint8_t> &key_in,
                          const std::vector<uint8_t> &plaintext_in,
                          std::vector<uint8_t> &ciphertext_out);
 
-void aes_256_s_shares(const std::vector<std::span<uint8_t>> &key_in,
-                      const std::vector<std::span<uint8_t>> &t_shares,
+void aes_256_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
+                      const std::vector<gsl::span<uint8_t>> &t_shares,
                       const std::vector<uint8_t> &plaintext_in,
-                      std::vector<std::span<uint8_t>> &ciphertext_shares_out,
-                      std::vector<std::span<uint8_t>> &s_shares_out);
+                      std::vector<gsl::span<uint8_t>> &ciphertext_shares_out,
+                      std::vector<gsl::span<uint8_t>> &s_shares_out);
 
 } // namespace AES256

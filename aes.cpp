@@ -236,11 +236,11 @@ aes_128_with_sbox_output(const std::vector<uint8_t> &key_in,
   return result;
 }
 
-void aes_128_s_shares(const std::vector<std::span<uint8_t>> &key_in,
-                      const std::vector<std::span<uint8_t>> &t_shares,
+void aes_128_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
+                      const std::vector<gsl::span<uint8_t>> &t_shares,
                       const std::vector<uint8_t> &plaintext_in,
-                      std::vector<std::span<uint8_t>> &ciphertext_out,
-                      std::vector<std::span<uint8_t>> &s_shares) {
+                      std::vector<gsl::span<uint8_t>> &ciphertext_out,
+                      std::vector<gsl::span<uint8_t>> &s_shares) {
 
   typedef uint8_t expanded_key_t[4][44];
   typedef uint8_t state_t[4][4];
@@ -523,11 +523,11 @@ aes_192_with_sbox_output(const std::vector<uint8_t> &key_in,
   return result;
 }
 
-void aes_192_s_shares(const std::vector<std::span<uint8_t>> &key_in,
-                      const std::vector<std::span<uint8_t>> &t_shares,
+void aes_192_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
+                      const std::vector<gsl::span<uint8_t>> &t_shares,
                       const std::vector<uint8_t> &plaintext_in,
-                      std::vector<std::span<uint8_t>> &ciphertext_out,
-                      std::vector<std::span<uint8_t>> &s_shares) {
+                      std::vector<gsl::span<uint8_t>> &ciphertext_out,
+                      std::vector<gsl::span<uint8_t>> &s_shares) {
 
   typedef uint8_t expanded_key_t[4][52];
   typedef uint8_t state_t[4][4];
@@ -830,11 +830,11 @@ aes_256_with_sbox_output(const std::vector<uint8_t> &key_in,
   return result;
 }
 
-void aes_256_s_shares(const std::vector<std::span<uint8_t>> &key_in,
-                      const std::vector<std::span<uint8_t>> &t_shares,
+void aes_256_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
+                      const std::vector<gsl::span<uint8_t>> &t_shares,
                       const std::vector<uint8_t> &plaintext_in,
-                      std::vector<std::span<uint8_t>> &ciphertext_out,
-                      std::vector<std::span<uint8_t>> &s_shares) {
+                      std::vector<gsl::span<uint8_t>> &ciphertext_out,
+                      std::vector<gsl::span<uint8_t>> &s_shares) {
 
   typedef uint8_t expanded_key_t[4][60];
   typedef uint8_t state_t[4][4];

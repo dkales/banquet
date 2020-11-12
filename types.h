@@ -1,11 +1,10 @@
 #pragma once
 
+#include "gsl-lite.hpp"
 #include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <vector>
-// TODO: swap for gsl span if older C++
-#include <span>
 
 #include "field.h"
 
@@ -58,19 +57,19 @@ public:
         _num_repetitions(num_repetitions), _num_parties(num_parties),
         _object_size(object_size) {}
 
-  inline std::span<T> get(size_t repetition, size_t party) {
+  inline gsl::span<T> get(size_t repetition, size_t party) {
     size_t offset =
         (repetition * _num_parties * _object_size) + (party * _object_size);
-    return std::span<T>(_data.data() + offset, _object_size);
+    return gsl::span<T>(_data.data() + offset, _object_size);
   }
-  inline std::span<const T> get(size_t repetition, size_t party) const {
+  inline gsl::span<const T> get(size_t repetition, size_t party) const {
     size_t offset =
         (repetition * _num_parties * _object_size) + (party * _object_size);
-    return std::span<const T>(_data.data() + offset, _object_size);
+    return gsl::span<const T>(_data.data() + offset, _object_size);
   }
 
-  std::vector<std::span<T>> get_repetition(size_t repetition) {
-    std::vector<std::span<T>> ret;
+  std::vector<gsl::span<T>> get_repetition(size_t repetition) {
+    std::vector<gsl::span<T>> ret;
     ret.reserve(_num_parties);
     size_t offset = (repetition * _num_parties * _object_size);
     for (size_t i = 0; i < _num_parties; i++)
