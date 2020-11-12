@@ -2,7 +2,7 @@
 #include <catch2/catch.hpp>
 
 #include "../banquet.h"
-#include "../utils.h"
+#include "utils.h"
 #include <NTL/GF2E.h>
 #include <NTL/GF2EX.h>
 

@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 
 struct timing_and_size_t {
   uint64_t keygen, sign, serialize, deserialize, verify, size;

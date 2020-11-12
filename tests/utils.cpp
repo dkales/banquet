@@ -197,4 +197,18 @@ GF2EX interpolate_with_precomputation(
   }
   return res;
 }
+field::GF2E ntl_to_custom(const GF2E &element) {
+  const GF2X &poly_rep = rep(element);
+  std::vector<uint8_t> buffer(8);
+  BytesFromGF2X(buffer.data(), poly_rep, buffer.size());
+  field::GF2E a;
+  a.from_bytes(buffer.data());
+  return a;
+}
+GF2E custom_to_ntl(const field::GF2E &element) {
+  std::vector<uint8_t> buffer(8);
+  element.to_bytes(buffer.data());
+  GF2X inner = GF2XFromBytes(buffer.data(), buffer.size());
+  return conv<GF2E>(inner);
+}
 } // namespace utils

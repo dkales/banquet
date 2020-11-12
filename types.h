@@ -4,9 +4,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <vector>
+// TODO: swap for gsl span if older C++
+#include <span>
 
-#include <NTL/GF2E.h>
-using namespace NTL;
+#include "field.h"
 
 /* Prefix values for domain separation */
 constexpr uint8_t HASH_PREFIX_0 = 0;
@@ -31,10 +32,10 @@ struct banquet_repetition_proof_t {
   std::vector<uint8_t> sk_delta;
   std::vector<uint8_t> t_delta;
   std::vector<uint8_t> output_broadcast;
-  std::vector<GF2E> P_delta;
-  GF2E P_at_R;
-  std::vector<GF2E> S_j_at_R;
-  std::vector<GF2E> T_j_at_R;
+  std::vector<field::GF2E> P_delta;
+  field::GF2E P_at_R;
+  std::vector<field::GF2E> S_j_at_R;
+  std::vector<field::GF2E> T_j_at_R;
 };
 
 struct banquet_signature_t {
@@ -44,3 +45,38 @@ struct banquet_signature_t {
   std::vector<uint8_t> h_3;
   std::vector<banquet_repetition_proof_t> proofs;
 };
+
+template <typename T> class RepContainer {
+  std::vector<T> _data;
+  size_t _num_repetitions;
+  size_t _num_parties;
+  size_t _object_size;
+
+public:
+  RepContainer(size_t num_repetitions, size_t num_parties, size_t object_size)
+      : _data(num_repetitions * num_parties * object_size),
+        _num_repetitions(num_repetitions), _num_parties(num_parties),
+        _object_size(object_size) {}
+
+  inline std::span<T> get(size_t repetition, size_t party) {
+    size_t offset =
+        (repetition * _num_parties * _object_size) + (party * _object_size);
+    return std::span<T>(_data.data() + offset, _object_size);
+  }
+  inline std::span<const T> get(size_t repetition, size_t party) const {
+    size_t offset =
+        (repetition * _num_parties * _object_size) + (party * _object_size);
+    return std::span<const T>(_data.data() + offset, _object_size);
+  }
+
+  std::vector<std::span<T>> get_repetition(size_t repetition) {
+    std::vector<std::span<T>> ret;
+    ret.reserve(_num_parties);
+    size_t offset = (repetition * _num_parties * _object_size);
+    for (size_t i = 0; i < _num_parties; i++)
+      ret.emplace_back(_data.data() + offset + i * _object_size, _object_size);
+    return ret;
+  }
+};
+
+typedef RepContainer<uint8_t> RepByteContainer;
