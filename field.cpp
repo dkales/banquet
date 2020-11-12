@@ -32,6 +32,19 @@ inline __m128i clmul(uint64_t a, uint64_t b) {
   return _mm_clmulepi64_si128(_mm_set_epi64x(0, a), _mm_set_epi64x(0, b), 0);
 }
 
+uint64_t reduce_GF2_16(__m128i in) {
+  // modulus = x^16 + x^5 + x^3 + x + 1
+  constexpr uint64_t lower_mask = 0xFFFFULL;
+  uint64_t R_lower = _mm_cvtsi128_si64(in);
+  uint64_t R_upper = R_lower >> 16;
+
+  uint64_t T = R_upper;
+  R_upper = R_upper ^ (T >> 11) ^ (T >> 13) ^ (T >> 15);
+  R_lower = R_lower ^ (R_upper << 5) ^ (R_upper << 3) ^ (R_upper << 1) ^
+            (R_upper << 0);
+  return lower_mask & R_lower;
+}
+
 // actually a bit slowerthan naive version below
 __attribute__((unused)) uint64_t reduce_GF2_32_barret(__m128i in) {
   // modulus = x^32 + x^7 + x^3 + x^2 + 1
@@ -174,6 +187,27 @@ void GF2E::from_bytes(uint8_t *in) {
 
 void GF2E::init_extension_field(const banquet_instance_t &instance) {
   switch (instance.lambda) {
+  case 2: {
+    // modulus = x^16 + x^5 + x^3 + x + 1
+    modulus =
+        (1ULL << 16) | (1ULL << 5) | (1ULL << 3) | (1ULL << 1) | (1ULL << 0);
+    reduce = reduce_GF2_16;
+    byte_size = 2;
+    // Ring morphism:
+    //   From: Finite Field in x of size 2^8
+    //   To:   Finite Field in y of size 2^16
+    //   Defn: x |--> y^14 + y^8 + y^7 + y^6 + y^3 + y^2 + 1
+    GF2E gen;
+    gen.set_coeff(14);
+    gen.set_coeff(8);
+    gen.set_coeff(7);
+    gen.set_coeff(6);
+    gen.set_coeff(3);
+    gen.set_coeff(2);
+    gen.set_coeff(0);
+
+    init_lifting_lut(gen);
+  } break;
   case 4: {
     // modulus = x^32 + x^7 + x^3 + x^2 + 1
     modulus =
