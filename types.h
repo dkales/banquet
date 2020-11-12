@@ -30,7 +30,6 @@ struct banquet_repetition_proof_t {
   std::vector<uint8_t> C_e;
   std::vector<uint8_t> sk_delta;
   std::vector<uint8_t> t_delta;
-  std::vector<uint8_t> output_broadcast;
   std::vector<field::GF2E> P_delta;
   field::GF2E P_at_R;
   std::vector<field::GF2E> S_j_at_R;

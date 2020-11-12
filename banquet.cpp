@@ -683,9 +683,6 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         party_seed_commitments[repetition][missing_party],
         rep_key_deltas[repetition],
         rep_t_deltas[repetition],
-        std::vector<uint8_t>(
-            rep_output_broadcasts.get(repetition, missing_party).begin(),
-            rep_output_broadcasts.get(repetition, missing_party).end()),
         P_deltas[repetition],
         c[repetition],
         a[repetition],
@@ -848,20 +845,15 @@ bool banquet_verify(const banquet_instance_t &instance,
     else
       throw std::runtime_error("invalid parameters");
 
-    // get missing output broadcast from proof
-    std::copy(proof.output_broadcast.begin(), proof.output_broadcast.end(),
+    // calculate missing output broadcast
+    std::copy(ct.begin(), ct.end(),
               ct_shares[missing_parties[repetition]].begin());
-    // check MPC execution is correct
-    std::vector<uint8_t> ct_check(instance.aes_params.block_size *
-                                  instance.aes_params.num_blocks);
-    memset(ct_check.data(), 0, ct_check.size());
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      std::transform(std::begin(ct_shares[party]), std::end(ct_shares[party]),
-                     std::begin(ct_check), std::begin(ct_check),
-                     std::bit_xor<uint8_t>());
-    }
-    if (memcmp(ct_check.data(), ct.data(), ct.size()) != 0) {
-      return false;
+      if (party != missing_parties[repetition])
+        std::transform(std::begin(ct_shares[party]), std::end(ct_shares[party]),
+                       std::begin(ct_shares[missing_parties[repetition]]),
+                       std::begin(ct_shares[missing_parties[repetition]]),
+                       std::bit_xor<uint8_t>());
     }
   }
 
@@ -1135,8 +1127,6 @@ banquet_serialize_signature(const banquet_instance_t &instance,
                       proof.sk_delta.end());
     serialized.insert(serialized.end(), proof.t_delta.begin(),
                       proof.t_delta.end());
-    serialized.insert(serialized.end(), proof.output_broadcast.begin(),
-                      proof.output_broadcast.end());
     for (size_t k = 0; k < instance.m2 + 1; k++) {
       std::vector<uint8_t> buffer = proof.P_delta[k].to_bytes();
       serialized.insert(serialized.end(), buffer.begin(), buffer.end());
@@ -1200,12 +1190,6 @@ banquet_deserialize_signature(const banquet_instance_t &instance,
     memcpy(t_delta.data(), serialized.data() + current_offset, t_delta.size());
     current_offset += t_delta.size();
 
-    std::vector<uint8_t> output_broadcast(instance.aes_params.block_size *
-                                          instance.aes_params.num_blocks);
-    memcpy(output_broadcast.data(), serialized.data() + current_offset,
-           output_broadcast.size());
-    current_offset += output_broadcast.size();
-
     field::GF2E tmp;
     std::vector<field::GF2E> P_delta;
     P_delta.reserve(instance.m2 + 1);
@@ -1241,9 +1225,9 @@ banquet_deserialize_signature(const banquet_instance_t &instance,
       tmp.from_bytes(buffer.data());
       T_j_at_R.push_back(tmp);
     }
-    proofs.emplace_back(banquet_repetition_proof_t{
-        reveallist, C_e, sk_delta, t_delta, output_broadcast, P_delta, P_at_R,
-        S_j_at_R, T_j_at_R});
+    proofs.emplace_back(banquet_repetition_proof_t{reveallist, C_e, sk_delta,
+                                                   t_delta, P_delta, P_at_R,
+                                                   S_j_at_R, T_j_at_R});
   }
   assert(current_offset == serialized.size());
   banquet_signature_t signature{salt, h_1, h_2, h_3, proofs};
