@@ -47,7 +47,9 @@ target_link_libraries(banquet_static PUBLIC keccak)
 
 add_library(bench_utils STATIC tools/bench_utils.cpp tools/bench_timing.cpp)
 add_executable(bench tools/bench.cpp)
+add_executable(bench_free tools/bench_free.cpp)
 target_link_libraries(bench banquet_static bench_utils)
+target_link_libraries(bench_free banquet_static bench_utils)
 
 if(BUILD_TESTS)
 FIND_PACKAGE(NTL REQUIRED)

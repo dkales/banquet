@@ -20,6 +20,18 @@ typedef struct {
   uint32_t iter;
 } bench_options_t;
 
+typedef struct {
+  uint32_t iter;
+  uint32_t kappa;
+  uint32_t m1;
+  uint32_t m2;
+  uint32_t tau;
+  uint32_t N;
+  uint32_t lambda;
+} bench_options_free_t;
+
 bool parse_args(bench_options_t *options, int argc, char **argv);
+
+bool parse_args_free(bench_options_free_t *options, int argc, char **argv);
 
 #endif

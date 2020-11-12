@@ -52,6 +52,14 @@ static void print_usage(const char *arg0) {
 #endif
 }
 
+static void print_usage_free(const char *arg0) {
+#if defined(_MSC_VER)
+  printf("usage: %s iterations instance\n", arg0);
+#else
+  printf("usage: %s [-i iterations] kappa N tau m1 m2 lambda\n", arg0);
+#endif
+}
+
 bool parse_args(bench_options_t *options, int argc, char **argv) {
   if (argc <= 1) {
     print_usage(argv[0]);
@@ -121,5 +129,81 @@ bool parse_args(bench_options_t *options, int argc, char **argv) {
   options->params = p;
 #endif
 
+  return true;
+}
+
+bool parse_args_free(bench_options_free_t *options, int argc, char **argv) {
+  if (argc <= 6) {
+    print_usage_free(argv[0]);
+    return false;
+  }
+
+  options->kappa = 0;
+  options->tau = 0;
+  options->N = 0;
+  options->m1 = 0;
+  options->m2 = 0;
+  options->lambda = 0;
+  options->iter = 10;
+
+  static const struct option long_options[] = {
+      {"iter", required_argument, NULL, 'i'}, {0, 0, 0, 0}};
+
+  int c = -1;
+  int option_index = 0;
+
+  while ((c = getopt_long(argc, argv, "i:l:", long_options, &option_index)) !=
+         -1) {
+    switch (c) {
+    case 'i':
+      if (!parse_uint32_t(&options->iter, optarg)) {
+        printf("Failed to parse argument as positive base-10 number!\n");
+        return false;
+      }
+      break;
+
+    case '?':
+    default:
+      print_usage_free(argv[0]);
+      return false;
+    }
+  }
+
+  uint32_t p = 0;
+  if (!parse_uint32_t(&p, argv[optind++])) {
+    printf("Failed to parse argument as positive base-10 number!\n");
+    return false;
+  }
+  options->kappa = p;
+
+  if (!parse_uint32_t(&p, argv[optind++])) {
+    printf("Failed to parse argument as positive base-10 number!\n");
+    return false;
+  }
+  options->N = p;
+
+  if (!parse_uint32_t(&p, argv[optind++])) {
+    printf("Failed to parse argument as positive base-10 number!\n");
+    return false;
+  }
+  options->tau = p;
+
+  if (!parse_uint32_t(&p, argv[optind++])) {
+    printf("Failed to parse argument as positive base-10 number!\n");
+    return false;
+  }
+  options->m1 = p;
+
+  if (!parse_uint32_t(&p, argv[optind++])) {
+    printf("Failed to parse argument as positive base-10 number!\n");
+    return false;
+  }
+  options->m2 = p;
+
+  if (!parse_uint32_t(&p, argv[optind++])) {
+    printf("Failed to parse argument as positive base-10 number!\n");
+    return false;
+  }
+  options->lambda = p;
   return true;
 }
