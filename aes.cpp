@@ -230,6 +230,7 @@ aes_128_with_sbox_output(const std::vector<uint8_t> &key_in,
   ciphertext_out.resize(AES128::BLOCK_SIZE * AES128::NUM_BLOCKS);
   bool ret = aes_128_save_sbox_state(key_in.data(), plaintext_in.data(),
                                      ciphertext_out.data(), result);
+  (void)ret;
   assert(ret);
   return result;
 }
@@ -517,6 +518,7 @@ aes_192_with_sbox_output(const std::vector<uint8_t> &key_in,
   ciphertext_out.resize(AES192::BLOCK_SIZE * AES192::NUM_BLOCKS);
   bool ret = aes_192_save_sbox_state(key_in.data(), plaintext_in.data(),
                                      ciphertext_out.data(), result);
+  (void)ret;
   assert(ret);
   return result;
 }
@@ -824,6 +826,7 @@ aes_256_with_sbox_output(const std::vector<uint8_t> &key_in,
 
   // remove duplicated keyschedule from saved sbox values
   // keyschedule = 52 sboxes, rounds = 224 delete from
+  (void)ret;
   assert(ret);
   return result;
 }
