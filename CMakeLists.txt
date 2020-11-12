@@ -5,14 +5,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17) 
 
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Choose the type of build." FORCE)
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 endif()
 
 set(CMAKE_C)
 
 include(CheckCXXCompilerFlag)
 
-set(BUILD_TESTS ON CACHE BOOL "Build unit tests.")
+set(BUILD_TESTS OFF CACHE BOOL "Build unit tests.")
 
 SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
