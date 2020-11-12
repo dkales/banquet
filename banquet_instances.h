@@ -28,9 +28,18 @@ enum banquet_params_t {
   Banquet_L1_Param10 = 10,
   Banquet_L3_Param1 = 11,
   Banquet_L3_Param2 = 12,
-  Banquet_L5_Param1 = 13,
-  Banquet_L5_Param2 = 14,
-  PARAMETER_SET_MAX_INDEX = 15
+  Banquet_L3_Param3 = 13,
+  Banquet_L3_Param4 = 14,
+  Banquet_L3_Param5 = 15,
+  Banquet_L3_Param6 = 16,
+  Banquet_L3_Param7 = 17,
+  Banquet_L5_Param1 = 18,
+  Banquet_L5_Param2 = 19,
+  Banquet_L5_Param3 = 20,
+  Banquet_L5_Param4 = 21,
+  Banquet_L5_Param5 = 22,
+  Banquet_L5_Param6 = 23,
+  PARAMETER_SET_MAX_INDEX = 24
 };
 
 struct banquet_aes_t {

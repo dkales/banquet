@@ -39,10 +39,19 @@ static const banquet_instance_t instances[PARAMETER_SET_MAX_INDEX] = {
     {AES128_PARAMS, 32, 16, 24, 128, 10, 20, 6, Banquet_L1_Param7},
     {AES128_PARAMS, 32, 16, 23, 256, 10, 20, 5, Banquet_L1_Param9},
     {AES128_PARAMS, 32, 16, 21, 256, 10, 20, 6, Banquet_L1_Param10},
-    {AES192_PARAMS, 48, 24, 38, 64, 16, 26, 4, Banquet_L3_Param1},
-    {AES192_PARAMS, 48, 24, 38, 64, 26, 16, 4, Banquet_L3_Param2},
-    {AES256_PARAMS, 64, 32, 50, 64, 20, 25, 4, Banquet_L5_Param1},
-    {AES256_PARAMS, 64, 32, 50, 64, 25, 20, 4, Banquet_L5_Param2},
+    {AES192_PARAMS, 48, 24, 46, 64, 16, 26, 4, Banquet_L3_Param1},
+    {AES192_PARAMS, 48, 24, 46, 64, 26, 16, 4, Banquet_L3_Param2},
+    {AES192_PARAMS, 48, 24, 62, 16, 26, 16, 4, Banquet_L3_Param3},
+    {AES192_PARAMS, 48, 24, 53, 32, 26, 16, 4, Banquet_L3_Param4},
+    {AES192_PARAMS, 48, 24, 40, 64, 26, 16, 6, Banquet_L3_Param5},
+    {AES192_PARAMS, 48, 24, 36, 128, 26, 16, 6, Banquet_L3_Param6},
+    {AES192_PARAMS, 48, 24, 32, 256, 26, 16, 6, Banquet_L3_Param7},
+    {AES256_PARAMS, 64, 32, 63, 64, 20, 25, 4, Banquet_L5_Param1},
+    {AES256_PARAMS, 64, 32, 84, 16, 25, 20, 4, Banquet_L5_Param2},
+    {AES256_PARAMS, 64, 32, 63, 32, 25, 20, 6, Banquet_L5_Param3},
+    {AES256_PARAMS, 64, 32, 54, 64, 25, 20, 6, Banquet_L5_Param4},
+    {AES256_PARAMS, 64, 32, 48, 128, 25, 20, 6, Banquet_L5_Param5},
+    {AES256_PARAMS, 64, 32, 43, 256, 25, 20, 6, Banquet_L5_Param6},
 };
 
 const banquet_instance_t &banquet_instance_get(banquet_params_t param) {

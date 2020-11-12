@@ -37,7 +37,7 @@ for test in testruns:
     keygen = (keygen / SCALING_FACTOR) / count
     sign = (sign / SCALING_FACTOR) / count
     ver = (ver / SCALING_FACTOR) / count
-    size = float(size) / count
+    size = float(size) / 1024 / count
     ser = (ser / SCALING_FACTOR) / count
     deser = (deser / SCALING_FACTOR) / count
     print("{},{},{},{},{},{}".format(keygen,sign,ver,size,ser,deser))
