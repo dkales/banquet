@@ -242,9 +242,9 @@ void aes_128_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
                       std::vector<gsl::span<uint8_t>> &ciphertext_out,
                       std::vector<gsl::span<uint8_t>> &s_shares) {
 
-  typedef uint8_t expanded_key_t[4][44];
-  typedef uint8_t state_t[4][4];
-  typedef uint8_t temp_t[4];
+  typedef std::array<std::array<uint8_t, 44>, 4> expanded_key_t;
+  typedef std::array<std::array<uint8_t, 4>, 4> state_t;
+  typedef std::array<uint8_t, 4> temp_t;
   int num_parties = key_in.size();
   std::vector<expanded_key_t> expanded(num_parties);
   std::vector<state_t> state(num_parties);
@@ -529,9 +529,9 @@ void aes_192_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
                       std::vector<gsl::span<uint8_t>> &ciphertext_out,
                       std::vector<gsl::span<uint8_t>> &s_shares) {
 
-  typedef uint8_t expanded_key_t[4][52];
-  typedef uint8_t state_t[4][4];
-  typedef uint8_t temp_t[4];
+  typedef std::array<std::array<uint8_t, 52>, 4> expanded_key_t;
+  typedef std::array<std::array<uint8_t, 4>, 4> state_t;
+  typedef std::array<uint8_t, 4> temp_t;
   int num_parties = key_in.size();
   std::vector<expanded_key_t> expanded(num_parties);
   std::vector<state_t> state(num_parties);
@@ -836,9 +836,9 @@ void aes_256_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
                       std::vector<gsl::span<uint8_t>> &ciphertext_out,
                       std::vector<gsl::span<uint8_t>> &s_shares) {
 
-  typedef uint8_t expanded_key_t[4][60];
-  typedef uint8_t state_t[4][4];
-  typedef uint8_t temp_t[4];
+  typedef std::array<std::array<uint8_t, 60>, 4> expanded_key_t;
+  typedef std::array<std::array<uint8_t, 4>, 4> state_t;
+  typedef std::array<uint8_t, 4> temp_t;
   int num_parties = key_in.size();
   std::vector<expanded_key_t> expanded(num_parties);
   std::vector<state_t> state(num_parties);
