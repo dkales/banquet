@@ -1,6 +1,7 @@
 #include "field.h"
 
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
 
 extern "C" {
@@ -39,34 +40,34 @@ uint64_t reduce_GF2_32(__m128i in) {
   uint64_t T2 = _mm_cvtsi128_si64(clmul(T1 >> 32, P));
   return 0xFFFFFFFFULL & (R ^ T2);
 }
+// todo implement generic reduction
 uint64_t reduce_GF2_40(__m128i in) {
   // modulus = x^40 + x^5 + x^4 + x^3 + 1
-  constexpr uint64_t P =
-      (1ULL << 40) | (1ULL << 5) | (1ULL << 4) | (1ULL << 3) | (1ULL << 0);
-  constexpr uint64_t mu = P;
   constexpr uint64_t upper_mask = 0xFFFFULL;
-  uint64_t R = _mm_extract_epi64(in, 0);
-  uint64_t R_red = ((_mm_extract_epi64(in, 1) & upper_mask) << 24) | R >> 40;
-  __m128i T1 = clmul(R_red, mu);
-  uint64_t T1_red = ((_mm_extract_epi64(T1, 1) & upper_mask) << 24) |
-                    _mm_extract_epi64(T1, 0) >> 40;
-  uint64_t T2 = _mm_extract_epi64(clmul(T1_red, P), 0);
-  return 0xFFFFFFFFFFULL & (R ^ T2);
+  constexpr uint64_t lower_mask = 0xFFFFFFFFFFULL;
+  uint64_t R_lower = _mm_extract_epi64(in, 0);
+  uint64_t R_upper =
+      ((_mm_extract_epi64(in, 1) & upper_mask) << 24) | (R_lower >> 40);
+
+  uint64_t T = R_upper;
+  R_upper = R_upper ^ (T >> 35) ^ (T >> 36) ^ (T >> 37);
+  R_lower = R_lower ^ (R_upper << 5) ^ (R_upper << 4) ^ (R_upper << 3) ^
+            (R_upper << 0);
+  return lower_mask & R_lower;
 }
 
 uint64_t reduce_GF2_48(__m128i in) {
   // modulus = x^48 + x^5 + x^3 + x^2 + 1
-  constexpr uint64_t P =
-      (1ULL << 48) | (1ULL << 5) | (1ULL << 3) | (1ULL << 2) | (1ULL << 0);
-  constexpr uint64_t mu = P;
   constexpr uint64_t upper_mask = 0xFFFFFFFFULL;
-  uint64_t R = _mm_extract_epi64(in, 0);
-  uint64_t R_red = ((_mm_extract_epi64(in, 1) & upper_mask) << 16) | R >> 48;
-  __m128i T1 = clmul(R_red, mu);
-  uint64_t T1_red = ((_mm_extract_epi64(T1, 1) & upper_mask) << 16) |
-                    _mm_extract_epi64(T1, 0) >> 48;
-  uint64_t T2 = _mm_extract_epi64(clmul(T1_red, P), 0);
-  return 0xFFFFFFFFFFFFFFULL & (R ^ T2);
+  constexpr uint64_t lower_mask = 0xFFFFFFFFFFFFULL;
+  uint64_t R_lower = _mm_extract_epi64(in, 0);
+  uint64_t R_upper =
+      ((_mm_extract_epi64(in, 1) & upper_mask) << 16) | (R_lower >> 48);
+  uint64_t T = R_upper;
+  R_upper = R_upper ^ (T >> 43) ^ (T >> 45) ^ (T >> 46);
+  R_lower = R_lower ^ (R_upper << 5) ^ (R_upper << 3) ^ (R_upper << 2) ^
+            (R_upper << 0);
+  return lower_mask & R_lower;
 }
 
 uint64_t GF2_euclidean_div_quotient(uint64_t a, uint64_t b) {
