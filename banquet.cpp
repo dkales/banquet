@@ -308,8 +308,8 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     // generate seed tree for the N parties
-    seed_trees.emplace_back(master_seeds[repetition], instance.num_MPC_parties,
-                            salt, repetition);
+    seed_trees.push_back(SeedTree(master_seeds[repetition],
+                                  instance.num_MPC_parties, salt, repetition));
 
     // commit to each party's seed;
     std::vector<std::vector<uint8_t>> current_party_seed_commitments;
@@ -755,8 +755,8 @@ bool banquet_verify(const banquet_instance_t &instance,
     if (missing_parties[repetition] != proof.reveallist.second)
       throw std::runtime_error(
           "modified signature between deserialization and verify");
-    seed_trees.emplace_back(proof.reveallist, instance.num_MPC_parties,
-                            signature.salt, repetition);
+    seed_trees.push_back(SeedTree(proof.reveallist, instance.num_MPC_parties,
+                                  signature.salt, repetition));
     // commit to each party's seed, fill up missing one with data from proof
     std::vector<std::vector<uint8_t>> current_party_seed_commitments;
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {

@@ -38,6 +38,8 @@ SeedTree::SeedTree(std::vector<uint8_t> seed, const size_t num_leaves,
 
   size_t last_non_leaf = get_parent(_num_total_nodes - 1);
   for (size_t i = 0; i <= last_non_leaf; i++) {
+    if (!node_exists(i))
+      continue;
     auto [left, right] = expandSeed(_data[i].value(), salt, rep_idx, i);
     if (node_exists(2 * i + 1)) {
       _data[2 * i + 1] = std::optional(left);
@@ -125,6 +127,7 @@ SeedTree::SeedTree(const reveal_list_t &reveallist, const size_t num_leaves,
   for (size_t node = first_leaf_idx + missing_leaf; node != 0;
        node = get_parent(node)) {
     if (!has_sibling(node)) {
+      path_idx++;
       continue;
     }
     size_t sibling = get_sibling(node);
@@ -134,7 +137,7 @@ SeedTree::SeedTree(const reveal_list_t &reveallist, const size_t num_leaves,
 
   size_t last_non_leaf = get_parent(_num_total_nodes - 1);
   for (size_t i = 0; i <= last_non_leaf; i++) {
-    if (!_data[i].has_value())
+    if (!node_exists(i) || !_data[i].has_value())
       continue;
     auto [left, right] = expandSeed(_data[i].value(), salt, rep_idx, i);
     if (node_exists(2 * i + 1)) {
@@ -181,6 +184,7 @@ reveal_list_t SeedTree::reveal_all_but(size_t leaf_idx) {
   for (size_t node = first_leaf_idx + leaf_idx; node != 0;
        node = get_parent(node)) {
     if (!has_sibling(node)) {
+      path.push_back(std::vector<uint8_t>(_data[0].value().size()));
       continue;
     }
     size_t sibling = get_sibling(node);
