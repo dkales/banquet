@@ -48,6 +48,10 @@ static void bench_sign_and_verify(const bench_options_t *options) {
     return;
   }
   const banquet_instance_t &instance = banquet_instance_get(options->params);
+  printf(
+      "Instance: N=%d, tau=%d, lambda=%d, m1=%d, m2=%d, AES-Keylen=Seclvl=%d\n",
+      instance.num_MPC_parties, instance.num_rounds, instance.lambda,
+      instance.m1, instance.m2, instance.aes_params.key_size);
 
   for (unsigned int i = 0; i != options->iter; ++i) {
     timing_and_size_t &timing = timings[i];
