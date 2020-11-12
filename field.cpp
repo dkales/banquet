@@ -1,8 +1,10 @@
 #include "field.h"
 
+#include <array>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 extern "C" {
 #include "endian_compat.h"
