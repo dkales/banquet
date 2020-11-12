@@ -212,21 +212,24 @@ phase_3_commitment(const banquet_instance_t &instance,
   return commitment;
 }
 
-std::vector<uint8_t> phase_3_expand(const banquet_instance_t &instance,
-                                    const std::vector<uint8_t> &h_3) {
-  assert(instance.num_MPC_parties <= 256);
-  // TODO assert(is_power_of_2(instance.num_MPC_parties));
+std::vector<uint16_t> phase_3_expand(const banquet_instance_t &instance,
+                                     const std::vector<uint8_t> &h_3) {
+  assert(instance.num_MPC_parties < (1ULL << 16));
   hash_context ctx;
   hash_init(&ctx, instance.digest_size);
   hash_update(&ctx, h_3.data(), h_3.size());
   hash_final(&ctx);
+  size_t num_squeeze_bytes = instance.num_MPC_parties > 256 ? 2 : 1;
 
-  std::vector<uint8_t> opened_parties;
-  uint8_t mask = (instance.num_MPC_parties - 1);
+  std::vector<uint16_t> opened_parties;
+  uint16_t mask = (1ULL << ceil_log2(instance.num_MPC_parties)) - 1;
   for (size_t e = 0; e < instance.num_rounds; e++) {
-    uint8_t party;
-    hash_squeeze(&ctx, &party, sizeof(uint8_t));
-    party = party & mask;
+    uint16_t party;
+    do {
+      hash_squeeze(&ctx, (uint8_t *)&party, num_squeeze_bytes);
+      party = le16toh(party);
+      party = party & mask;
+    } while (party >= instance.num_MPC_parties);
     opened_parties.push_back(party);
   }
   return opened_parties;
@@ -661,7 +664,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   std::vector<uint8_t> h_3 = phase_3_commitment(
       instance, salt, h_2, c, c_shares, a, a_shares, b, b_shares);
 
-  std::vector<uint8_t> missing_parties = phase_3_expand(instance, h_3);
+  std::vector<uint16_t> missing_parties = phase_3_expand(instance, h_3);
 
   /////////////////////////////////////////////////////////////////////////////
   // phase 7: Open the views of the checking protocol
@@ -744,7 +747,7 @@ bool banquet_verify(const banquet_instance_t &instance,
   std::vector<field::GF2E> R_es =
       phase_2_expand(instance, h_2, forbidden_challenge_values);
   // h3 expansion already happened in deserialize to get missing parties
-  std::vector<uint8_t> missing_parties =
+  std::vector<uint16_t> missing_parties =
       phase_3_expand(instance, signature.h_3);
 
   // rebuild SeedTrees
@@ -1172,7 +1175,7 @@ banquet_deserialize_signature(const banquet_instance_t &instance,
   current_offset += h_3.size();
   std::vector<banquet_repetition_proof_t> proofs;
 
-  std::vector<uint8_t> missing_parties = phase_3_expand(instance, h_3);
+  std::vector<uint16_t> missing_parties = phase_3_expand(instance, h_3);
   size_t reveallist_size = ceil_log2(instance.num_MPC_parties);
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     reveal_list_t reveallist;
