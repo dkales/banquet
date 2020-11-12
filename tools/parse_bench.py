@@ -41,6 +41,6 @@ for test in testruns:
     size = float(size) / 1024 / count
     ser = (ser / SCALING_FACTOR) / count
     deser = (deser / SCALING_FACTOR) / count
-    print("{:2f},{:2f},{:2f},{:3f},{:2f},{:2f}".format(
+    print("{:.2f},{:.2f},{:.2f},{:.3f},{:.2f},{:.2f}".format(
         keygen, sign, ver, size, ser, deser))
     print("-"*80)
