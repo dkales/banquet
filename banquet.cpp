@@ -7,8 +7,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-// TODO: remove after debug
-#include <iostream>
 
 extern "C" {
 #include "kdf_shake.h"
@@ -178,14 +176,15 @@ phase_2_expand(const banquet_instance_t &instance,
   return R_es;
 }
 
-std::vector<uint8_t> phase_3_commitment(
-    const banquet_instance_t &instance, const banquet_salt_t &salt,
-    const std::vector<uint8_t> &h_2, const std::vector<field::GF2E> &c,
-    const std::vector<std::vector<field::GF2E>> &c_shares,
-    const std::vector<std::vector<field::GF2E>> &a,
-    const std::vector<std::vector<std::vector<field::GF2E>>> &a_shares,
-    const std::vector<std::vector<field::GF2E>> &b,
-    const std::vector<std::vector<std::vector<field::GF2E>>> &b_shares) {
+std::vector<uint8_t>
+phase_3_commitment(const banquet_instance_t &instance,
+                   const banquet_salt_t &salt, const std::vector<uint8_t> &h_2,
+                   const std::vector<field::GF2E> &c,
+                   const std::vector<std::vector<field::GF2E>> &c_shares,
+                   const std::vector<std::vector<field::GF2E>> &a,
+                   const RepContainer<field::GF2E> &a_shares,
+                   const std::vector<std::vector<field::GF2E>> &b,
+                   const RepContainer<field::GF2E> &b_shares) {
 
   hash_context ctx;
   hash_init_prefix(&ctx, instance.digest_size, HASH_PREFIX_3);
@@ -201,8 +200,8 @@ std::vector<uint8_t> phase_3_commitment(
       hash_update_GF2E(&ctx, instance, a[repetition][j]);
       hash_update_GF2E(&ctx, instance, b[repetition][j]);
       for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-        hash_update_GF2E(&ctx, instance, a_shares[repetition][party][j]);
-        hash_update_GF2E(&ctx, instance, b_shares[repetition][party][j]);
+        hash_update_GF2E(&ctx, instance, a_shares.get(repetition, party)[j]);
+        hash_update_GF2E(&ctx, instance, b_shares.get(repetition, party)[j]);
       }
     }
   }
@@ -602,17 +601,20 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   std::vector<field::GF2E> c(instance.num_rounds);
   std::vector<std::vector<field::GF2E>> c_shares(instance.num_rounds);
   std::vector<std::vector<field::GF2E>> a(instance.num_rounds);
-  std::vector<std::vector<std::vector<field::GF2E>>> a_shares(
-      instance.num_rounds);
   std::vector<std::vector<field::GF2E>> b(instance.num_rounds);
-  std::vector<std::vector<std::vector<field::GF2E>>> b_shares(
-      instance.num_rounds);
+  RepContainer<field::GF2E> a_shares(instance.num_rounds,
+                                     instance.num_MPC_parties, instance.m1);
+  RepContainer<field::GF2E> b_shares(instance.num_rounds,
+                                     instance.num_MPC_parties, instance.m1);
 
   std::vector<field::GF2E> lagrange_polys_evaluated_at_Re_m2(instance.m2 + 1);
   std::vector<field::GF2E> lagrange_polys_evaluated_at_Re_2m2(2 * instance.m2 +
                                                               1);
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
+    c_shares[repetition].resize(instance.num_MPC_parties);
+    a[repetition].resize(instance.m1);
+    b[repetition].resize(instance.m1);
     for (size_t k = 0; k < instance.m2 + 1; k++) {
       lagrange_polys_evaluated_at_Re_m2[k] =
           field::eval(precomputation_for_zero_to_m2[k], R_es[repetition]);
@@ -622,24 +624,19 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
           field::eval(precomputation_for_zero_to_2m2[k], R_es[repetition]);
     }
 
-    c_shares[repetition].resize(instance.num_MPC_parties);
-    a[repetition].resize(instance.m1);
-    b[repetition].resize(instance.m1);
-    a_shares[repetition].resize(instance.num_MPC_parties);
-    b_shares[repetition].resize(instance.num_MPC_parties);
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      a_shares[repetition][party].resize(instance.m1);
-      b_shares[repetition][party].resize(instance.m1);
+      auto a_shares_party = a_shares.get(repetition, party);
+      auto b_shares_party = b_shares.get(repetition, party);
       for (size_t j = 0; j < instance.m1; j++) {
         // compute a_ej^i and b_ej^i
         // a_shares[repetition][party][j] =
         // eval(S_eji[repetition][party][j], R_es[repetition]);
         // b_shares[repetition][party][j] =
         // eval(T_eji[repetition][party][j], R_es[repetition]);
-        a_shares[repetition][party][j] = dot_product(
-            lagrange_polys_evaluated_at_Re_m2, s_prime[repetition][party][j]);
-        b_shares[repetition][party][j] = dot_product(
-            lagrange_polys_evaluated_at_Re_m2, t_prime[repetition][party][j]);
+        a_shares_party[j] = dot_product(lagrange_polys_evaluated_at_Re_m2,
+                                        s_prime[repetition][party][j]);
+        b_shares_party[j] = dot_product(lagrange_polys_evaluated_at_Re_m2,
+                                        t_prime[repetition][party][j]);
       }
       // compute c_e^i
       c_shares[repetition][party] = dot_product(
@@ -648,9 +645,11 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     // open c_e and a,b values
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       c[repetition] += c_shares[repetition][party];
+      auto a_shares_party = a_shares.get(repetition, party);
+      auto b_shares_party = b_shares.get(repetition, party);
       for (size_t j = 0; j < instance.m1; j++) {
-        a[repetition][j] += a_shares[repetition][party][j];
-        b[repetition][j] += b_shares[repetition][party][j];
+        a[repetition][j] += a_shares_party[j];
+        b[repetition][j] += b_shares_party[j];
       }
     }
   }
@@ -859,7 +858,6 @@ bool banquet_verify(const banquet_instance_t &instance,
                      std::bit_xor<uint8_t>());
     }
     if (memcmp(ct_check.data(), ct.data(), ct.size()) != 0) {
-      std::cout << ("aaaaaa");
       return false;
     }
   }
@@ -999,11 +997,11 @@ bool banquet_verify(const banquet_instance_t &instance,
   std::vector<field::GF2E> c(instance.num_rounds);
   std::vector<std::vector<field::GF2E>> c_shares(instance.num_rounds);
   std::vector<std::vector<field::GF2E>> a(instance.num_rounds);
-  std::vector<std::vector<std::vector<field::GF2E>>> a_shares(
-      instance.num_rounds);
   std::vector<std::vector<field::GF2E>> b(instance.num_rounds);
-  std::vector<std::vector<std::vector<field::GF2E>>> b_shares(
-      instance.num_rounds);
+  RepContainer<field::GF2E> a_shares(instance.num_rounds,
+                                     instance.num_MPC_parties, instance.m1);
+  RepContainer<field::GF2E> b_shares(instance.num_rounds,
+                                     instance.num_MPC_parties, instance.m1);
 
   std::vector<field::GF2E> lagrange_polys_evaluated_at_Re_m2(instance.m2 + 1);
   std::vector<field::GF2E> lagrange_polys_evaluated_at_Re_2m2(2 * instance.m2 +
@@ -1024,22 +1022,20 @@ bool banquet_verify(const banquet_instance_t &instance,
     c_shares[repetition].resize(instance.num_MPC_parties);
     a[repetition].resize(instance.m1);
     b[repetition].resize(instance.m1);
-    a_shares[repetition].resize(instance.num_MPC_parties);
-    b_shares[repetition].resize(instance.num_MPC_parties);
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      a_shares[repetition][party].resize(instance.m1);
-      b_shares[repetition][party].resize(instance.m1);
       if (party != missing_party) {
+        auto a_shares_party = a_shares.get(repetition, party);
+        auto b_shares_party = b_shares.get(repetition, party);
         for (size_t j = 0; j < instance.m1; j++) {
           // compute a_ej^i and b_ej^i
           //  a_shares[repetition][party][j] =
           //  eval(S_eji[repetition][party][j], R_es[repetition]);
           //  b_shares[repetition][party][j] =
           //  eval(T_eji[repetition][party][j], R_es[repetition]);
-          a_shares[repetition][party][j] = dot_product(
-              lagrange_polys_evaluated_at_Re_m2, s_prime[repetition][party][j]);
-          b_shares[repetition][party][j] = dot_product(
-              lagrange_polys_evaluated_at_Re_m2, t_prime[repetition][party][j]);
+          a_shares_party[j] = dot_product(lagrange_polys_evaluated_at_Re_m2,
+                                          s_prime[repetition][party][j]);
+          b_shares_party[j] = dot_product(lagrange_polys_evaluated_at_Re_m2,
+                                          t_prime[repetition][party][j]);
         }
         // compute c_e^i
         // c_shares[repetition][party] =
@@ -1052,20 +1048,22 @@ bool banquet_verify(const banquet_instance_t &instance,
     // calculate missing shares
     c[repetition] = proof.P_at_R;
     c_shares[repetition][missing_party] = proof.P_at_R;
+    auto a_shares_missing = a_shares.get(repetition, missing_party);
+    auto b_shares_missing = b_shares.get(repetition, missing_party);
     for (size_t j = 0; j < instance.m1; j++) {
       a[repetition][j] = proof.S_j_at_R[j];
-      a_shares[repetition][missing_party][j] = proof.S_j_at_R[j];
+      a_shares_missing[j] = proof.S_j_at_R[j];
       b[repetition][j] = proof.T_j_at_R[j];
-      b_shares[repetition][missing_party][j] = proof.T_j_at_R[j];
+      b_shares_missing[j] = proof.T_j_at_R[j];
     }
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       if (party != missing_party) {
         c_shares[repetition][missing_party] -= c_shares[repetition][party];
+        auto a_shares_party = a_shares.get(repetition, party);
+        auto b_shares_party = b_shares.get(repetition, party);
         for (size_t j = 0; j < instance.m1; j++) {
-          a_shares[repetition][missing_party][j] -=
-              a_shares[repetition][party][j];
-          b_shares[repetition][missing_party][j] -=
-              b_shares[repetition][party][j];
+          a_shares_missing[j] -= a_shares_party[j];
+          b_shares_missing[j] -= b_shares_party[j];
         }
       }
     }
@@ -1087,15 +1085,12 @@ bool banquet_verify(const banquet_instance_t &instance,
       instance, signature.salt, h_2, c, c_shares, a, a_shares, b, b_shares);
   // do checks
   if (memcmp(h_1.data(), signature.h_1.data(), h_1.size()) != 0) {
-    std::cout << ("1111");
     return false;
   }
   if (memcmp(h_2.data(), signature.h_2.data(), h_2.size()) != 0) {
-    std::cout << ("2222");
     return false;
   }
   if (memcmp(h_3.data(), signature.h_3.data(), h_3.size()) != 0) {
-    std::cout << ("3333");
     return false;
   }
 
@@ -1107,7 +1102,6 @@ bool banquet_verify(const banquet_instance_t &instance,
                signature.proofs[repetition].T_j_at_R[j];
     }
     if (accum != signature.proofs[repetition].P_at_R) {
-      std::cout << ("bbbbbb");
       return false;
     }
   }

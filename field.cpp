@@ -53,7 +53,7 @@ uint64_t reduce_GF2_32(__m128i in) {
             (R_upper << 0);
   return lower_mask & R_lower;
 }
-// todo implement generic reduction
+
 uint64_t reduce_GF2_40(__m128i in) {
   // modulus = x^40 + x^5 + x^4 + x^3 + 1
   constexpr uint64_t upper_mask = 0xFFFFULL;

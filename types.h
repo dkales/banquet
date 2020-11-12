@@ -46,27 +46,31 @@ struct banquet_signature_t {
   std::vector<banquet_repetition_proof_t> proofs;
 };
 
-class RepByteContainer {
-  std::vector<uint8_t> _data;
+template <typename T> class RepContainer {
+  std::vector<T> _data;
   size_t _num_repetitions;
   size_t _num_parties;
   size_t _object_size;
 
 public:
-  RepByteContainer(size_t num_repetitions, size_t num_parties,
-                   size_t object_size)
+  RepContainer(size_t num_repetitions, size_t num_parties, size_t object_size)
       : _data(num_repetitions * num_parties * object_size),
         _num_repetitions(num_repetitions), _num_parties(num_parties),
         _object_size(object_size) {}
 
-  inline std::span<uint8_t> get(size_t repetition, size_t party) {
+  inline std::span<T> get(size_t repetition, size_t party) {
     size_t offset =
         (repetition * _num_parties * _object_size) + (party * _object_size);
-    return std::span<uint8_t>(_data.data() + offset, _object_size);
+    return std::span<T>(_data.data() + offset, _object_size);
+  }
+  inline std::span<const T> get(size_t repetition, size_t party) const {
+    size_t offset =
+        (repetition * _num_parties * _object_size) + (party * _object_size);
+    return std::span<const T>(_data.data() + offset, _object_size);
   }
 
-  std::vector<std::span<uint8_t>> get_repetition(size_t repetition) {
-    std::vector<std::span<uint8_t>> ret;
+  std::vector<std::span<T>> get_repetition(size_t repetition) {
+    std::vector<std::span<T>> ret;
     ret.reserve(_num_parties);
     size_t offset = (repetition * _num_parties * _object_size);
     for (size_t i = 0; i < _num_parties; i++)
@@ -74,3 +78,5 @@ public:
     return ret;
   }
 };
+
+typedef RepContainer<uint8_t> RepByteContainer;
