@@ -30,7 +30,8 @@ inline __m128i clmul(uint64_t a, uint64_t b) {
   return _mm_clmulepi64_si128(_mm_set_epi64x(0, a), _mm_set_epi64x(0, b), 0);
 }
 
-uint64_t reduce_GF2_32(__m128i in) {
+// actually a bit slowerthan naive version below
+uint64_t reduce_GF2_32_barret(__m128i in) {
   // modulus = x^32 + x^7 + x^3 + x^2 + 1
   constexpr uint64_t P =
       (1ULL << 32) | (1ULL << 7) | (1ULL << 3) | (1ULL << 2) | (1ULL << 0);
@@ -39,6 +40,18 @@ uint64_t reduce_GF2_32(__m128i in) {
   uint64_t T1 = _mm_cvtsi128_si64(clmul(R >> 32, mu));
   uint64_t T2 = _mm_cvtsi128_si64(clmul(T1 >> 32, P));
   return 0xFFFFFFFFULL & (R ^ T2);
+}
+uint64_t reduce_GF2_32(__m128i in) {
+  // modulus = x^32 + x^7 + x^3 + x^2 + 1
+  constexpr uint64_t lower_mask = 0xFFFFFFFFULL;
+  uint64_t R_lower = _mm_cvtsi128_si64(in);
+  uint64_t R_upper = R_lower >> 32;
+
+  uint64_t T = R_upper;
+  R_upper = R_upper ^ (T >> 25) ^ (T >> 29) ^ (T >> 30);
+  R_lower = R_lower ^ (R_upper << 7) ^ (R_upper << 3) ^ (R_upper << 2) ^
+            (R_upper << 0);
+  return lower_mask & R_lower;
 }
 // todo implement generic reduction
 uint64_t reduce_GF2_40(__m128i in) {
