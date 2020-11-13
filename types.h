@@ -39,7 +39,6 @@ struct banquet_repetition_proof_t {
 struct banquet_signature_t {
   banquet_salt_t salt;
   std::vector<uint8_t> h_1;
-  std::vector<uint8_t> h_2;
   std::vector<uint8_t> h_3;
   std::vector<banquet_repetition_proof_t> proofs;
 };

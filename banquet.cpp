@@ -698,7 +698,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     proofs.push_back(proof);
   }
 
-  banquet_signature_t signature{salt, h_1, h_2, h_3, proofs};
+  banquet_signature_t signature{salt, h_1, h_3, proofs};
 
   return signature;
 }
@@ -1082,9 +1082,6 @@ bool banquet_verify(const banquet_instance_t &instance,
   if (memcmp(h_1.data(), signature.h_1.data(), h_1.size()) != 0) {
     return false;
   }
-  if (memcmp(h_2.data(), signature.h_2.data(), h_2.size()) != 0) {
-    return false;
-  }
   if (memcmp(h_3.data(), signature.h_3.data(), h_3.size()) != 0) {
     return false;
   }
@@ -1112,8 +1109,6 @@ banquet_serialize_signature(const banquet_instance_t &instance,
                     signature.salt.end());
   serialized.insert(serialized.end(), signature.h_1.begin(),
                     signature.h_1.end());
-  serialized.insert(serialized.end(), signature.h_2.begin(),
-                    signature.h_2.end());
   serialized.insert(serialized.end(), signature.h_3.begin(),
                     signature.h_3.end());
 
@@ -1155,12 +1150,9 @@ banquet_deserialize_signature(const banquet_instance_t &instance,
   banquet_salt_t salt;
   memcpy(salt.data(), serialized.data() + current_offset, salt.size());
   current_offset += salt.size();
-  std::vector<uint8_t> h_1(instance.digest_size), h_2(instance.digest_size),
-      h_3(instance.digest_size);
+  std::vector<uint8_t> h_1(instance.digest_size), h_3(instance.digest_size);
   memcpy(h_1.data(), serialized.data() + current_offset, h_1.size());
   current_offset += h_1.size();
-  memcpy(h_2.data(), serialized.data() + current_offset, h_2.size());
-  current_offset += h_2.size();
   memcpy(h_3.data(), serialized.data() + current_offset, h_3.size());
   current_offset += h_3.size();
   std::vector<banquet_repetition_proof_t> proofs;
@@ -1230,6 +1222,6 @@ banquet_deserialize_signature(const banquet_instance_t &instance,
                                                    S_j_at_R, T_j_at_R});
   }
   assert(current_offset == serialized.size());
-  banquet_signature_t signature{salt, h_1, h_2, h_3, proofs};
+  banquet_signature_t signature{salt, h_1, h_3, proofs};
   return signature;
 }
