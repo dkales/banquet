@@ -8,8 +8,6 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 endif()
 
-set(CMAKE_C)
-
 include(CheckCXXCompilerFlag)
 
 set(BUILD_TESTS OFF CACHE BOOL "Build unit tests.")
