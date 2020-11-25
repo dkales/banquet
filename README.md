@@ -17,7 +17,7 @@ mkdir build
 cd build
 cmake ..
 make 
-# tests
+# tests (if you built them)
 make test
 # benchmarks
 ./bench -i <iterations> <instance> #instance from banquet_instances.h
