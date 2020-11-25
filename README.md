@@ -21,5 +21,5 @@ make
 make test
 # benchmarks
 ./bench -i <iterations> <instance> #instance from banquet_instances.h
-./bench_free -i <iterations> kappa N tau m1 m2 lambda #benchmark parameters freely
+./bench_free -i <iterations> <kappa> <N> <tau> <m1> <m2> <lambda> #benchmark parameters freely
 ```
