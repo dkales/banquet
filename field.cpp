@@ -367,6 +367,16 @@ std::vector<GF2E> interpolate_with_precomputation(
   return res;
 }
 
+void adjust_interpolation_with_precomputation(
+    std::vector<GF2E> &polynomial,
+    const std::vector<GF2E> &precomputed_lagrange_polynomial,
+    const GF2E &y_value) {
+  if (precomputed_lagrange_polynomial.size() != polynomial.size())
+    throw std::runtime_error("invalid sizes for adjusting interpolation");
+
+  polynomial += precomputed_lagrange_polynomial * y_value;
+}
+
 std::vector<GF2E> build_from_roots(const std::vector<GF2E> &roots) {
   size_t len = roots.size();
 
@@ -448,6 +458,11 @@ std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
     result[i] *= rhs;
 
   return result;
+}
+
+std::vector<field::GF2E> operator*(const field::GF2E &lhs,
+                                   const std::vector<field::GF2E> &rhs) {
+  return rhs * lhs;
 }
 
 // naive polynomial multiplication
