@@ -4,13 +4,9 @@
 #include "field.h"
 #include "tape.h"
 #include "tree.h"
-#include "tools/bench_timing.h"
-
-#include <cinttypes>
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <cstdio>
 
 extern "C" {
 #include "kdf_shake.h"
