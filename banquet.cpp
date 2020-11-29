@@ -276,13 +276,6 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   // init modulus of extension field F_{2^{8\lambda}}
   field::GF2E::init_extension_field(instance);
 
-  timing_context_t t_ctx;
-  if (!timing_init(&t_ctx)) {
-    printf("Failed to initialize timing functionality.\n");
-  }
-  uint64_t poly_time = 0;
-  uint64_t total_time = timing_read(&t_ctx);
-
   // grab aes key, pt and ct
   std::vector<uint8_t> key = keypair.first;
   std::vector<uint8_t> pt_ct = keypair.second;
@@ -470,17 +463,11 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   // std::vector<std::vector<GF2EX>> P_ei(instance.num_rounds);
   std::vector<std::vector<field::GF2E>> P_deltas(instance.num_rounds);
 
-  // *** NEW ***
-  // Compute polynomials all at once
-  //
-  std::vector<field::GF2E> lifted_s_values, lifted_t_values;
-
+  // polynomials for adjusting last S evaluation
   std::vector<field::GF2E> last_lagrange = precomputation_for_zero_to_m2[instance.m2];
   std::vector<field::GF2E> last_lagrange_sq = last_lagrange * last_lagrange;
 
-  // vectors of polynomials for m2 sboxes and some product polynomials
-  std::vector<std::vector<field::GF2E> > S_polys(instance.m1);
-  std::vector<std::vector<field::GF2E> > T_polys(instance.m2);
+  // vectors of intermediate product polynomials for computing P
   std::vector<std::vector<field::GF2E> > ST_products(instance.m1);
   std::vector<std::vector<field::GF2E> > S_lag_products(instance.m1);
   std::vector<std::vector<field::GF2E> > T_lag_products(instance.m1);
@@ -488,37 +475,25 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   std::vector<std::vector<field::GF2E> > s_random_points(instance.num_rounds),
     t_random_points(instance.num_rounds);
 
-  for (size_t idx = 0; idx < instance.aes_params.num_sboxes; idx++) {
-      lifted_s_values.push_back(field::lift_uint8_t(sbox_pairs.first[idx]));
-      lifted_t_values.push_back(field::lift_uint8_t(sbox_pairs.second[idx]));
-  }
   // rearrange s-box values into polynomials
   for (size_t j = 0; j < instance.m1; j++) {
-    std::vector<field::GF2E> S_poly_values(instance.m2 + 1);
-    std::vector<field::GF2E> T_poly_values(instance.m2 + 1);
-    //S_poly_values[i].resize(instance.m2 + 1);
-    //S_poly_values[i].resize(instance.m2 + 1);
+    std::vector<field::GF2E> S_poly(instance.m2 + 1);
+    std::vector<field::GF2E> T_poly(instance.m2 + 1);
     for (size_t k = 0; k < instance.m2; k++) {
-      S_poly_values[k] = field::lift_uint8_t(sbox_pairs.first[j + instance.m1 * k]);
-      T_poly_values[k] = field::lift_uint8_t(sbox_pairs.second[j + instance.m1 * k]);
-      //s_bar[k] = r_ejs[repetition][j] * lifted_s[j + instance.m1 * k];
-      //t_bar[k] = lifted_t[j + instance.m1 * k];
+      S_poly[k] = field::lift_uint8_t(sbox_pairs.first[j + instance.m1 * k]);
+      T_poly[k] = field::lift_uint8_t(sbox_pairs.second[j + instance.m1 * k]);
     }
-    // Leave m2-th point to be 0
-    S_poly_values[instance.m2] = 0;
-    T_poly_values[instance.m2] = 0;
+    // Leave last point to be 0
+    S_poly[instance.m2] = 0;
+    T_poly[instance.m2] = 0;
 
-    S_polys[j] = field::interpolate_with_precomputation(precomputation_for_zero_to_m2, S_poly_values);
-    T_polys[j] = field::interpolate_with_precomputation(precomputation_for_zero_to_m2, T_poly_values);
-
-    ST_products[j] = S_polys[j] * T_polys[j];
-    S_lag_products[j] = S_polys[j] * last_lagrange;
-    T_lag_products[j] = T_polys[j] * last_lagrange;
+    S_poly = field::interpolate_with_precomputation(precomputation_for_zero_to_m2, S_poly);
+    T_poly = field::interpolate_with_precomputation(precomputation_for_zero_to_m2, T_poly);
+    
+    ST_products[j] = S_poly * T_poly;
+    S_lag_products[j] = S_poly * last_lagrange;
+    T_lag_products[j] = T_poly * last_lagrange;
   }
-  //std::vector<field::GF2E> sbox_poly = field::interpolate_with_precomputation();
-  //std::vector<field::GF2E> T_poly;
-
-
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     s_prime[repetition].resize(instance.num_MPC_parties);
@@ -582,75 +557,21 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         t_prime[repetition][party][j] = t_bar;
       }
     }
-  //}
-    // New: compute P's all at once
-    /*std::vector<field::GF2E> P(2 * instance.m2 + 1);
-    for (size_t j = 0; j < instance.m1; j++) {
-      std::vector<field::GF2E> s_prime_sum(instance.m2 + 1);
-      std::vector<field::GF2E> t_prime_sum(instance.m2 + 1);
-      std::vector<field::GF2E> S_sum;
-      std::vector<field::GF2E> T_sum;*/
 
-
-  // Compute P for every repetition 
-    // compute product polynomial P_e
+    // Compute product polynomial P_e
     std::vector<field::GF2E> P(2 * instance.m2 + 1);
-    std::vector<field::GF2E> alt_P(2 * instance.m2 + 1);
-
-    std::vector<field::GF2E> tmp;// std::vector<field::GF2E> S_sum;
 
     for (size_t j = 0; j < instance.m1; j++) {
-      std::vector<field::GF2E> s_prime_sum(instance.m2 + 1);
-      std::vector<field::GF2E> t_prime_sum(instance.m2 + 1);
-      std::vector<field::GF2E> S_sum;
-      std::vector<field::GF2E> T_sum;
-
       // Note: we only multiply r_ej by the "S" part of the equation below, not the entire thing.
-      // This corresponds to randomizing the s-boxes by r_ej, and *then* adding the random point,
+      // This corresponds to randomizing the s-boxes by r_ej, and *then* incorporating the random point,
       // rather than the other way round (as in the paper)
-      alt_P += r_ejs[repetition][j] *
+      P += r_ejs[repetition][j] *
         (ST_products[j] +
         t_random_points[repetition][j] * S_lag_products[j]) + 
         s_random_points[repetition][j] * T_lag_products[j] + 
         last_lagrange_sq * s_random_points[repetition][j] * t_random_points[repetition][j];
-
-      uint64_t tmp_time = timing_read(&t_ctx);
-/*
-      for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-        // S_sum += S_eji[repetition][party][j];
-        // T_sum += T_eji[repetition][party][j];
-        s_prime_sum += s_prime[repetition][party][j];
-        t_prime_sum += t_prime[repetition][party][j];
-      }
-
-      //if (j < 3)
-      {
-        //tmp = (T_polys[j] + last_lagrange * t_random_points[repetition][j]);
-
-//        tmp = r_ejs[repetition][j] * S_polys[j] + last_lagrange * s_random_points[repetition][j];
-      S_sum = field::interpolate_with_precomputation(
-          precomputation_for_zero_to_m2, s_prime_sum);
-      T_sum = field::interpolate_with_precomputation(
-          precomputation_for_zero_to_m2, t_prime_sum);
-      //printf("T_sum in rep %d: %d\n", repetition, T_sum[0].to_bytes()[0]);
-      P += S_sum * T_sum;
-//      poly_time += timing_read(&t_ctx) - tmp_time;
-      }
-*/
-      if (j == 0) {
-/*printf("S[0]: %" PRIu64 "\n", S_sum[0]);
-    printf("alt_S[0]: %" PRIu64 "\n", tmp[0]);*/
-    //printf("s_prime_sum[0]: %" PRIu64 "\n", s_prime_sum[0]);
-      }
     }
-    P = alt_P;
     P_e[repetition] = P;
-    /*printf("P[0]: %" PRIu64 "\n", P[0]);
-    printf("alt_P[0]: %" PRIu64 "\n", alt_P[0]);*/
-
-
-  //for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
-    // compute P_i
 
     // compute sharing of P
     std::vector<std::vector<field::GF2E>> &P_shares = P_e_shares[repetition];
@@ -813,9 +734,6 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
 
   banquet_signature_t signature{salt, h_1, h_3, proofs};
 
-  printf("Poly time: %" PRIu64 "\n", poly_time);
-  printf("Total time: %" PRIu64 "\n", timing_read(&t_ctx) - total_time);
-  timing_close(&t_ctx);
   return signature;
 }
 

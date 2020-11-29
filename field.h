@@ -65,12 +65,6 @@ std::vector<GF2E> interpolate_with_precomputation(
     const std::vector<std::vector<GF2E>> &precomputed_lagrange_polynomials,
     const std::vector<GF2E> &y_values);
 
-// adjust a single point from zero
-void adjust_interpolation_with_precomputation(
-    std::vector<GF2E> &polynomial,
-    const std::vector<GF2E> &precomputed_lagrange_polynomial,
-    const GF2E &y_value);
-
 std::vector<GF2E> build_from_roots(const std::vector<GF2E> &roots);
 GF2E eval(const std::vector<GF2E> &poly, const GF2E &point);
 } // namespace field
