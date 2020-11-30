@@ -75,5 +75,7 @@ std::vector<field::GF2E> &operator+=(std::vector<field::GF2E> &self,
                                      const std::vector<field::GF2E> &rhs);
 std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
                                    const field::GF2E &rhs);
+std::vector<field::GF2E> operator*(const field::GF2E &lhs,
+                                   const std::vector<field::GF2E> &rhs);
 std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
                                    const std::vector<field::GF2E> &rhs);

@@ -459,6 +459,38 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   // std::vector<std::vector<GF2EX>> P_ei(instance.num_rounds);
   std::vector<std::vector<field::GF2E>> P_deltas(instance.num_rounds);
 
+  // polynomials for adjusting last S evaluation
+  std::vector<field::GF2E> last_lagrange = precomputation_for_zero_to_m2[instance.m2];
+  std::vector<field::GF2E> last_lagrange_sq = last_lagrange * last_lagrange;
+
+  // vectors of intermediate product polynomials for computing P
+  std::vector<std::vector<field::GF2E> > ST_products(instance.m1);
+  std::vector<std::vector<field::GF2E> > S_lag_products(instance.m1);
+  std::vector<std::vector<field::GF2E> > T_lag_products(instance.m1);
+
+  std::vector<std::vector<field::GF2E> > s_random_points(instance.num_rounds),
+    t_random_points(instance.num_rounds);
+
+  // rearrange s-box values into polynomials
+  for (size_t j = 0; j < instance.m1; j++) {
+    std::vector<field::GF2E> S_poly(instance.m2 + 1);
+    std::vector<field::GF2E> T_poly(instance.m2 + 1);
+    for (size_t k = 0; k < instance.m2; k++) {
+      S_poly[k] = field::lift_uint8_t(sbox_pairs.first[j + instance.m1 * k]);
+      T_poly[k] = field::lift_uint8_t(sbox_pairs.second[j + instance.m1 * k]);
+    }
+    // Leave last point to be 0
+    S_poly[instance.m2] = 0;
+    T_poly[instance.m2] = 0;
+
+    S_poly = field::interpolate_with_precomputation(precomputation_for_zero_to_m2, S_poly);
+    T_poly = field::interpolate_with_precomputation(precomputation_for_zero_to_m2, T_poly);
+    
+    ST_products[j] = S_poly * T_poly;
+    S_lag_products[j] = S_poly * last_lagrange;
+    T_lag_products[j] = T_poly * last_lagrange;
+  }
+
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     s_prime[repetition].resize(instance.num_MPC_parties);
     t_prime[repetition].resize(instance.num_MPC_parties);
@@ -466,6 +498,9 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     // T_eji[repetition].resize(instance.num_MPC_parties);
     // P_ei[repetition].resize(instance.num_MPC_parties);
     P_deltas[repetition].resize(instance.m2 + 1);
+
+    s_random_points[repetition].resize(instance.m1);
+    t_random_points[repetition].resize(instance.m1);
 
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       s_prime[repetition][party].resize(instance.m1);
@@ -505,6 +540,9 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
             lambda_sized_buffer.data(), lambda_sized_buffer.size());
         t_bar[instance.m2].from_bytes(lambda_sized_buffer.data());
 
+        s_random_points[repetition][j] += s_bar[instance.m2];
+        t_random_points[repetition][j] += t_bar[instance.m2];
+
         // interpolate polynomials S_ej^i and T_ej^i
         // S_eji[repetition][party][j] = utils::interpolate_with_precomputation(
         // precomputation_for_zero_to_m2, s_bar);
@@ -516,26 +554,18 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       }
     }
 
-    // compute product polynomial P_e
+    // Compute product polynomial P_e
     std::vector<field::GF2E> P(2 * instance.m2 + 1);
+
     for (size_t j = 0; j < instance.m1; j++) {
-      std::vector<field::GF2E> s_prime_sum(instance.m2 + 1);
-      std::vector<field::GF2E> t_prime_sum(instance.m2 + 1);
-      std::vector<field::GF2E> S_sum;
-      std::vector<field::GF2E> T_sum;
-
-      for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-        // S_sum += S_eji[repetition][party][j];
-        // T_sum += T_eji[repetition][party][j];
-        s_prime_sum += s_prime[repetition][party][j];
-        t_prime_sum += t_prime[repetition][party][j];
-      }
-      S_sum = field::interpolate_with_precomputation(
-          precomputation_for_zero_to_m2, s_prime_sum);
-      T_sum = field::interpolate_with_precomputation(
-          precomputation_for_zero_to_m2, t_prime_sum);
-
-      P += S_sum * T_sum;
+      // Note: we only multiply r_ej by the "S" part of the equation below, not the entire thing.
+      // This corresponds to randomizing the s-boxes by r_ej, and *then* incorporating the random point,
+      // rather than the other way round (as in the paper)
+      P += r_ejs[repetition][j] *
+        (ST_products[j] +
+        t_random_points[repetition][j] * S_lag_products[j]) + 
+        s_random_points[repetition][j] * T_lag_products[j] + 
+        last_lagrange_sq * s_random_points[repetition][j] * t_random_points[repetition][j];
     }
     P_e[repetition] = P;
 

@@ -450,6 +450,11 @@ std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
   return result;
 }
 
+std::vector<field::GF2E> operator*(const field::GF2E &lhs,
+                                   const std::vector<field::GF2E> &rhs) {
+  return rhs * lhs;
+}
+
 // naive polynomial multiplication
 std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
                                    const std::vector<field::GF2E> &rhs) {
