@@ -559,8 +559,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
 
     for (size_t j = 0; j < instance.m1; j++) {
       // Note: we only multiply r_ej by the "S" part of the equation below, not the entire thing.
-      // This corresponds to randomizing the s-boxes by r_ej, and *then* incorporating the random point,
-      // rather than the other way round (as in the paper)
+      // This corresponds to first randomizing the s-boxes by r_ej, and then incorporating the random point
       P += r_ejs[repetition][j] *
         (ST_products[j] +
         t_random_points[repetition][j] * S_lag_products[j]) + 
