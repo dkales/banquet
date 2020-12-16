@@ -201,16 +201,19 @@ static __m128i aes_128_key_expansion(__m128i key, __m128i keygened) {
 
 #define restore_t_shares(m, s_shares, t_shares, party, sbox_index)             \
   do {                                                                         \
-    uint8_t buf[16];                                                           \
+    uint8_t buf[16], buf2[16];                                                 \
     _mm_storeu_si128((__m128i *)buf, m);                                       \
     for (int i = 0; i < 4; i++) {                                              \
       for (int j = 0; j < 4; j++) {                                            \
         s_shares[party][sbox_index] = buf[j * 4 + i];                          \
         uint8_t t = t_shares[party][sbox_index++];                             \
-        buf[j * 4 + i] = inverse(t);                                           \
+        t = t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);         \
+        if (party == 0)                                                        \
+          t ^= AES_SBOX_AFFINE_CONST;                                          \
+        buf2[((4 + j - i) % 4) * 4 + i] = t;                                   \
       }                                                                        \
     }                                                                          \
-    m = _mm_loadu_si128((const __m128i *)buf);                                 \
+    m = _mm_loadu_si128((const __m128i *)buf2);                                \
   } while (0)
 
 } // namespace
@@ -530,13 +533,6 @@ void aes_128_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
   // that arises from actually using aes instructions
   // the affine part of the sbox should only happen at party 0, so
   // we cancel out the additional part for the other parties after MixCol
-  __m128i fix_for_affine_part = _mm_set1_epi8(99);
-  for (party = 1; party < num_parties; party++) {
-    for (int i = 1; i < 11; i++) {
-      key_schedule[party][i] =
-          _mm_xor_si128(key_schedule[party][i], fix_for_affine_part);
-    }
-  }
   for (party = 0; party < num_parties; party++) {
     sbox_index = 40;
     if (party == 0)
@@ -545,25 +541,43 @@ void aes_128_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
       state[party] = _mm_setzero_si128();
     state[party] = _mm_xor_si128(state[party], key_schedule[party][0]);
     restore_t_shares(state[party], s_shares, t_shares, party, sbox_index);
-    state[party] = _mm_aesenc_si128(state[party], key_schedule[party][1]);
+    state[party] =
+        _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state[party])));
+    state[party] = _mm_xor_si128(state[party], key_schedule[party][1]);
     restore_t_shares(state[party], s_shares, t_shares, party, sbox_index);
-    state[party] = _mm_aesenc_si128(state[party], key_schedule[party][2]);
+    state[party] =
+        _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state[party])));
+    state[party] = _mm_xor_si128(state[party], key_schedule[party][2]);
     restore_t_shares(state[party], s_shares, t_shares, party, sbox_index);
-    state[party] = _mm_aesenc_si128(state[party], key_schedule[party][3]);
+    state[party] =
+        _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state[party])));
+    state[party] = _mm_xor_si128(state[party], key_schedule[party][3]);
     restore_t_shares(state[party], s_shares, t_shares, party, sbox_index);
-    state[party] = _mm_aesenc_si128(state[party], key_schedule[party][4]);
+    state[party] =
+        _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state[party])));
+    state[party] = _mm_xor_si128(state[party], key_schedule[party][4]);
     restore_t_shares(state[party], s_shares, t_shares, party, sbox_index);
-    state[party] = _mm_aesenc_si128(state[party], key_schedule[party][5]);
+    state[party] =
+        _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state[party])));
+    state[party] = _mm_xor_si128(state[party], key_schedule[party][5]);
     restore_t_shares(state[party], s_shares, t_shares, party, sbox_index);
-    state[party] = _mm_aesenc_si128(state[party], key_schedule[party][6]);
+    state[party] =
+        _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state[party])));
+    state[party] = _mm_xor_si128(state[party], key_schedule[party][6]);
     restore_t_shares(state[party], s_shares, t_shares, party, sbox_index);
-    state[party] = _mm_aesenc_si128(state[party], key_schedule[party][7]);
+    state[party] =
+        _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state[party])));
+    state[party] = _mm_xor_si128(state[party], key_schedule[party][7]);
     restore_t_shares(state[party], s_shares, t_shares, party, sbox_index);
-    state[party] = _mm_aesenc_si128(state[party], key_schedule[party][8]);
+    state[party] =
+        _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state[party])));
+    state[party] = _mm_xor_si128(state[party], key_schedule[party][8]);
     restore_t_shares(state[party], s_shares, t_shares, party, sbox_index);
-    state[party] = _mm_aesenc_si128(state[party], key_schedule[party][9]);
+    state[party] =
+        _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state[party])));
+    state[party] = _mm_xor_si128(state[party], key_schedule[party][9]);
     restore_t_shares(state[party], s_shares, t_shares, party, sbox_index);
-    state[party] = _mm_aesenclast_si128(state[party], key_schedule[party][10]);
+    state[party] = _mm_xor_si128(state[party], key_schedule[party][10]);
 
     _mm_storeu_si128((__m128i *)ciphertext_out[party].data(), state[party]);
   }
