@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <iostream> //TODO remove
 
 extern "C" {
 #include "kdf_shake.h"

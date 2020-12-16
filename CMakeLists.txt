@@ -31,12 +31,13 @@ set(BANQUET_SRCS
 CHECK_CXX_COMPILER_FLAG(-mpclmul COMPILER_HAS_M_PCLMUL)
 CHECK_CXX_COMPILER_FLAG(-msse2 COMPILER_HAS_M_SSE2)
 CHECK_CXX_COMPILER_FLAG(-msse4 COMPILER_HAS_M_SSE4)
-if (COMPILER_HAS_M_PCLMUL AND COMPILER_HAS_M_SSE2 AND COMPILER_HAS_M_SSE4)
-  add_compile_options(-mpclmul -msse2 -msse4)
+CHECK_CXX_COMPILER_FLAG(-maes COMPILER_HAS_M_AES)
+if (COMPILER_HAS_M_PCLMUL AND COMPILER_HAS_M_SSE2 AND COMPILER_HAS_M_SSE4 AND COMPILER_HAS_M_AES)
+  add_compile_options(-mpclmul -msse2 -msse4 -maes)
 else()
   message(
     ERROR
-    "compiler does not have at least one of flag (pclmul, sse2, sse4) which are needed"  )
+    "compiler does not have at least one of flag (pclmul, sse2, sse4, aes) which are needed"  )
 endif()
 
 add_library(banquet_static STATIC ${BANQUET_SRCS})
