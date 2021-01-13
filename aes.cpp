@@ -318,17 +318,14 @@ inline void KEY_256_ASSIST_2(__m128i *temp1, __m128i *temp3) {
 
 #define restore_t_shares(m, s_shares, t_shares, party, sbox_index)             \
   do {                                                                         \
-    uint8_t buf[16], buf2[16];                                                 \
     __m128i tmp;                                                               \
-    _mm_storeu_si128((__m128i *)buf, m);                                       \
-    for (int i = 0; i < 4; i++) {                                              \
-      for (int j = 0; j < 4; j++) {                                            \
-        s_shares[party][sbox_index] = buf[j * 4 + i];                          \
-        uint8_t t = t_shares[party][sbox_index++];                             \
-        buf2[((4 + j - i) % 4) * 4 + i] = t;                                   \
-      }                                                                        \
-    }                                                                          \
-    m = _mm_loadu_si128((const __m128i *)buf2);                                \
+    tmp = _mm_shuffle_epi8(m, _mm_set_epi8(15, 11, 7, 3, 14, 10, 6, 2, 13, 9,  \
+                                           5, 1, 12, 8, 4, 0));                \
+    _mm_storeu_si128((__m128i *)(&s_shares[party][sbox_index]), tmp);          \
+    m = _mm_loadu_si128((const __m128i *)(&t_shares[party][sbox_index]));      \
+    sbox_index += 16;                                                          \
+    m = _mm_shuffle_epi8(m, _mm_set_epi8(14, 9, 4, 3, 13, 8, 7, 2, 12, 11, 6,  \
+                                         1, 15, 10, 5, 0));                    \
     tmp = _mm_xor_si128(_mm_rotl_epi8(m, 1), _mm_rotl_epi8(m, 3));             \
     tmp = _mm_xor_si128(tmp, _mm_rotl_epi8(tmp, 1));                           \
     m = _mm_xor_si128(tmp, m);                                                 \
