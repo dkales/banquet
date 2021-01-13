@@ -307,21 +307,33 @@ inline void KEY_256_ASSIST_2(__m128i *temp1, __m128i *temp3) {
     m = _mm_insert_epi8(m, s, 12);                                             \
   } while (0)
 
+#define _mm_srli_epi8(mm, Imm)                                                 \
+  _mm_and_si128(_mm_set1_epi8(0xFF >> Imm), _mm_srli_epi32(mm, Imm))
+
+#define _mm_slli_epi8(mm, Imm)                                                 \
+  _mm_and_si128(_mm_set1_epi8((uint8_t)(0xFF << Imm)), _mm_slli_epi32(mm, Imm))
+
+#define _mm_rotl_epi8(mm, shift)                                               \
+  _mm_or_si128(_mm_slli_epi8(mm, shift), _mm_srli_epi8(mm, (8 - shift)))
+
 #define restore_t_shares(m, s_shares, t_shares, party, sbox_index)             \
   do {                                                                         \
     uint8_t buf[16], buf2[16];                                                 \
+    __m128i tmp;                                                               \
     _mm_storeu_si128((__m128i *)buf, m);                                       \
     for (int i = 0; i < 4; i++) {                                              \
       for (int j = 0; j < 4; j++) {                                            \
         s_shares[party][sbox_index] = buf[j * 4 + i];                          \
         uint8_t t = t_shares[party][sbox_index++];                             \
-        t = t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);         \
-        if (party == 0)                                                        \
-          t ^= AES_SBOX_AFFINE_CONST;                                          \
         buf2[((4 + j - i) % 4) * 4 + i] = t;                                   \
       }                                                                        \
     }                                                                          \
     m = _mm_loadu_si128((const __m128i *)buf2);                                \
+    tmp = _mm_xor_si128(_mm_rotl_epi8(m, 1), _mm_rotl_epi8(m, 3));             \
+    tmp = _mm_xor_si128(tmp, _mm_rotl_epi8(tmp, 1));                           \
+    m = _mm_xor_si128(tmp, m);                                                 \
+    if (party == 0)                                                            \
+      m = _mm_xor_si128(m, _mm_set1_epi8(AES_SBOX_AFFINE_CONST));              \
   } while (0)
 
 } // namespace
