@@ -1,7 +1,6 @@
 #include "aes.h"
 #include <cassert>
 #include <cstring>
-#include <iostream>
 extern "C" {
 #include <wmmintrin.h> //for intrinsics for AES-NI
 }
@@ -29,19 +28,6 @@ unsigned char square(unsigned char c) { return multiply(c, c); }
 
 unsigned char xtime(unsigned char c) { return multiply(c, 2); }
 
-unsigned char bytesub(unsigned char c) {
-  unsigned char c3 = multiply(square(c), c);
-  unsigned char c7 = multiply(square(c3), c);
-  unsigned char c63 = multiply(square(square(square(c7))), c7);
-  unsigned char c127 = multiply(square(c63), c);
-  unsigned char c254 = square(c127);
-
-  unsigned char result = c254 ^ ROTL8(c254, 1) ^ ROTL8(c254, 2) ^
-                         ROTL8(c254, 3) ^ ROTL8(c254, 4) ^
-                         AES_SBOX_AFFINE_CONST;
-
-  return result;
-}
 unsigned char inverse(unsigned char c) {
   unsigned char c3 = multiply(square(c), c);
   unsigned char c7 = multiply(square(c3), c);
@@ -49,20 +35,6 @@ unsigned char inverse(unsigned char c) {
   unsigned char c127 = multiply(square(c63), c);
   unsigned char c254 = square(c127);
   return c254;
-}
-unsigned char bytesub_save(unsigned char c, std::pair<uint8_t, uint8_t> &save) {
-  unsigned char c3 = multiply(square(c), c);
-  unsigned char c7 = multiply(square(c3), c);
-  unsigned char c63 = multiply(square(square(square(c7))), c7);
-  unsigned char c127 = multiply(square(c63), c);
-  unsigned char c254 = square(c127);
-  save.first = c;
-  save.second = c254;
-
-  unsigned char result = c254 ^ ROTL8(c254, 1) ^ ROTL8(c254, 2) ^
-                         ROTL8(c254, 3) ^ ROTL8(c254, 4) ^
-                         AES_SBOX_AFFINE_CONST;
-  return result;
 }
 // does not add the affine constant, this is added to first party manually
 inline unsigned char bytesub_restore(unsigned char t) {
@@ -110,16 +82,15 @@ inline void KEY_256_ASSIST_1(__m128i *temp1, __m128i *temp2) {
   *temp1 = _mm_xor_si128(*temp1, temp4);
   *temp1 = _mm_xor_si128(*temp1, *temp2);
 }
-inline void KEY_256_ASSIST_2(__m128i *temp1, __m128i *temp3) {
-  __m128i temp2, temp4;
-  temp4 = _mm_aeskeygenassist_si128(*temp1, 0x0);
-  temp2 = _mm_shuffle_epi32(temp4, 0xaa);
-  temp4 = _mm_slli_si128(*temp3, 0x4);
-  *temp3 = _mm_xor_si128(*temp3, temp4);
-  temp4 = _mm_slli_si128(temp4, 0x4);
-  *temp3 = _mm_xor_si128(*temp3, temp4);
-  temp4 = _mm_slli_si128(temp4, 0x4);
-  *temp3 = _mm_xor_si128(*temp3, temp4);
+inline void KEY_256_ASSIST_2(__m128i temp1, __m128i *temp3) {
+  __m128i temp2;
+  temp2 = _mm_shuffle_epi32(temp1, 0xaa);
+  temp1 = _mm_slli_si128(*temp3, 0x4);
+  *temp3 = _mm_xor_si128(*temp3, temp1);
+  temp1 = _mm_slli_si128(temp1, 0x4);
+  *temp3 = _mm_xor_si128(*temp3, temp1);
+  temp1 = _mm_slli_si128(temp1, 0x4);
+  *temp3 = _mm_xor_si128(*temp3, temp1);
   *temp3 = _mm_xor_si128(*temp3, temp2);
 }
 
@@ -180,6 +151,60 @@ inline void KEY_256_ASSIST_2(__m128i *temp1, __m128i *temp3) {
     t = t_shares[party][sbox_index++];                                         \
     t = t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);             \
     key = _mm_insert_epi8(keygend, t ^ affine, 7);                             \
+  } while (0)
+
+#define AES_256_key_exp_restore(key, m, s_shares, t_shares, party, sbox_index, \
+                                affine, rcon)                                  \
+  do {                                                                         \
+    __m128i keygend = _mm_setzero_si128();                                     \
+    uint8_t s, t;                                                              \
+    s = _mm_extract_epi8(m, 13);                                               \
+    s_shares[party][sbox_index] = s;                                           \
+    t = t_shares[party][sbox_index++];                                         \
+    t = t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);             \
+    keygend = _mm_insert_epi8(keygend, t ^ affine ^ rcon, 12);                 \
+    s = _mm_extract_epi8(m, 14);                                               \
+    s_shares[party][sbox_index] = s;                                           \
+    t = t_shares[party][sbox_index++];                                         \
+    t = t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);             \
+    keygend = _mm_insert_epi8(keygend, t ^ affine, 13);                        \
+    s = _mm_extract_epi8(m, 15);                                               \
+    s_shares[party][sbox_index] = s;                                           \
+    t = t_shares[party][sbox_index++];                                         \
+    t = t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);             \
+    keygend = _mm_insert_epi8(keygend, t ^ affine, 14);                        \
+    s = _mm_extract_epi8(m, 12);                                               \
+    s_shares[party][sbox_index] = s;                                           \
+    t = t_shares[party][sbox_index++];                                         \
+    t = t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);             \
+    key = _mm_insert_epi8(keygend, t ^ affine, 15);                            \
+  } while (0)
+
+#define AES_256_key_exp_restore_2(key, m, s_shares, t_shares, party,           \
+                                  sbox_index, affine)                          \
+  do {                                                                         \
+    __m128i keygend = _mm_setzero_si128();                                     \
+    uint8_t s, t;                                                              \
+    s = _mm_extract_epi8(m, 12);                                               \
+    s_shares[party][sbox_index] = s;                                           \
+    t = t_shares[party][sbox_index++];                                         \
+    t = t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);             \
+    keygend = _mm_insert_epi8(keygend, t ^ affine, 8);                         \
+    s = _mm_extract_epi8(m, 13);                                               \
+    s_shares[party][sbox_index] = s;                                           \
+    t = t_shares[party][sbox_index++];                                         \
+    t = t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);             \
+    keygend = _mm_insert_epi8(keygend, t ^ affine, 9);                         \
+    s = _mm_extract_epi8(m, 14);                                               \
+    s_shares[party][sbox_index] = s;                                           \
+    t = t_shares[party][sbox_index++];                                         \
+    t = t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);             \
+    keygend = _mm_insert_epi8(keygend, t ^ affine, 10);                        \
+    s = _mm_extract_epi8(m, 15);                                               \
+    s_shares[party][sbox_index] = s;                                           \
+    t = t_shares[party][sbox_index++];                                         \
+    t = t ^ ROTL8(t, 1) ^ ROTL8(t, 2) ^ ROTL8(t, 3) ^ ROTL8(t, 4);             \
+    key = _mm_insert_epi8(keygend, t ^ affine, 11);                            \
   } while (0)
 
 // helper functions to check for zeros in sbox inputs
@@ -258,6 +283,34 @@ inline void KEY_256_ASSIST_2(__m128i *temp1, __m128i *temp3) {
     saved_sbox_state.first.push_back(s);                                       \
     saved_sbox_state.second.push_back(t);                                      \
     s = _mm_extract_epi8(m, 4);                                                \
+    if (s == 0)                                                                \
+      return false;                                                            \
+    t = inverse(s);                                                            \
+    saved_sbox_state.first.push_back(s);                                       \
+    saved_sbox_state.second.push_back(t);                                      \
+  } while (0)
+#define check_for_zeros_and_save_KS_256(m, saved_sbox_state)                   \
+  do {                                                                         \
+    uint8_t s, t;                                                              \
+    s = _mm_extract_epi8(m, 12);                                               \
+    if (s == 0)                                                                \
+      return false;                                                            \
+    t = inverse(s);                                                            \
+    saved_sbox_state.first.push_back(s);                                       \
+    saved_sbox_state.second.push_back(t);                                      \
+    s = _mm_extract_epi8(m, 13);                                               \
+    if (s == 0)                                                                \
+      return false;                                                            \
+    t = inverse(s);                                                            \
+    saved_sbox_state.first.push_back(s);                                       \
+    saved_sbox_state.second.push_back(t);                                      \
+    s = _mm_extract_epi8(m, 14);                                               \
+    if (s == 0)                                                                \
+      return false;                                                            \
+    t = inverse(s);                                                            \
+    saved_sbox_state.first.push_back(s);                                       \
+    saved_sbox_state.second.push_back(t);                                      \
+    s = _mm_extract_epi8(m, 15);                                               \
     if (s == 0)                                                                \
       return false;                                                            \
     t = inverse(s);                                                            \
@@ -471,108 +524,6 @@ aes_128_with_sbox_output(const std::vector<uint8_t> &key_in,
   return result;
 }
 
-void aes_128_s_shares_old(const std::vector<gsl::span<uint8_t>> &key_in,
-                          const std::vector<gsl::span<uint8_t>> &t_shares,
-                          const std::vector<uint8_t> &plaintext_in,
-                          std::vector<gsl::span<uint8_t>> &ciphertext_out,
-                          std::vector<gsl::span<uint8_t>> &s_shares) {
-
-  typedef std::array<std::array<uint8_t, 44>, 4> expanded_key_t;
-  typedef std::array<std::array<uint8_t, 4>, 4> state_t;
-  typedef std::array<uint8_t, 4> temp_t;
-  int num_parties = key_in.size();
-  std::vector<expanded_key_t> expanded(num_parties);
-  std::vector<state_t> state(num_parties);
-  std::vector<state_t> newstate(num_parties);
-  uint8_t roundconstant;
-  int i;
-  int j;
-  int r;
-  int party;
-  int sbox_index = 0;
-  int first_party = 0;
-
-  for (j = 0; j < 4; ++j)
-    for (i = 0; i < 4; ++i)
-      for (party = 0; party < num_parties; party++)
-        expanded[party][i][j] = key_in[party][j * 4 + i];
-
-  roundconstant = 1;
-  for (j = 4; j < 44; ++j) {
-    std::vector<temp_t> temp(num_parties);
-    if (j % 4)
-      for (i = 0; i < 4; ++i)
-        for (party = 0; party < num_parties; party++)
-          temp[party][i] = expanded[party][i][j - 1];
-    else {
-      for (i = 0; i < 4; ++i) {
-        for (party = 0; party < num_parties; party++) {
-          unsigned char s = expanded[party][(i + 1) % 4][j - 1];
-          s_shares[party][sbox_index] = s;
-          temp[party][i] = bytesub_restore(t_shares[party][sbox_index]);
-        }
-        temp[0][i] ^= AES_SBOX_AFFINE_CONST;
-        sbox_index++;
-      }
-      temp[first_party][0] ^= roundconstant;
-      roundconstant = xtime(roundconstant);
-    }
-    for (i = 0; i < 4; ++i)
-      for (party = 0; party < num_parties; party++) {
-        expanded[party][i][j] = temp[party][i] ^ expanded[party][i][j - 4];
-      }
-  }
-
-  for (j = 0; j < 4; ++j)
-    for (i = 0; i < 4; ++i) {
-      state[first_party][i][j] =
-          plaintext_in[j * 4 + i] ^ expanded[first_party][i][j];
-      for (party = 1; party < num_parties; party++) {
-        state[party][i][j] = expanded[party][i][j];
-      }
-    }
-
-  for (r = 0; r < 10; ++r) {
-    for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j) {
-        for (party = 0; party < num_parties; party++) {
-          s_shares[party][sbox_index] = state[party][i][j];
-          newstate[party][i][j] = bytesub_restore(t_shares[party][sbox_index]);
-        }
-        newstate[0][i][j] ^= AES_SBOX_AFFINE_CONST;
-        sbox_index++;
-      }
-    for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j)
-        for (party = 0; party < num_parties; party++) {
-          state[party][i][j] = newstate[party][i][(j + i) % 4];
-        }
-    if (r < 9)
-      for (j = 0; j < 4; ++j) {
-        for (party = 0; party < num_parties; party++) {
-          unsigned char a0 = state[party][0][j];
-          unsigned char a1 = state[party][1][j];
-          unsigned char a2 = state[party][2][j];
-          unsigned char a3 = state[party][3][j];
-          state[party][0][j] = xtime(a0 ^ a1) ^ a1 ^ a2 ^ a3;
-          state[party][1][j] = xtime(a1 ^ a2) ^ a2 ^ a3 ^ a0;
-          state[party][2][j] = xtime(a2 ^ a3) ^ a3 ^ a0 ^ a1;
-          state[party][3][j] = xtime(a3 ^ a0) ^ a0 ^ a1 ^ a2;
-        }
-      }
-    for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j)
-        for (party = 0; party < num_parties; party++) {
-          state[party][i][j] ^= expanded[party][i][r * 4 + 4 + j];
-        }
-  }
-
-  for (party = 0; party < num_parties; party++) {
-    for (j = 0; j < 4; ++j)
-      for (i = 0; i < 4; ++i)
-        ciphertext_out[party][j * 4 + i] = state[party][i][j];
-  }
-}
 void aes_128_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
                       const std::vector<gsl::span<uint8_t>> &t_shares,
                       const std::vector<uint8_t> &plaintext_in,
@@ -1098,281 +1049,209 @@ void aes_192_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
     }
   }
 }
-void aes_192_s_shares_old(const std::vector<gsl::span<uint8_t>> &key_in,
-                          const std::vector<gsl::span<uint8_t>> &t_shares,
-                          const std::vector<uint8_t> &plaintext_in,
-                          std::vector<gsl::span<uint8_t>> &ciphertext_out,
-                          std::vector<gsl::span<uint8_t>> &s_shares) {
-
-  typedef std::array<std::array<uint8_t, 52>, 4> expanded_key_t;
-  typedef std::array<std::array<uint8_t, 4>, 4> state_t;
-  typedef std::array<uint8_t, 4> temp_t;
-  int num_parties = key_in.size();
-  std::vector<expanded_key_t> expanded(num_parties);
-  std::vector<state_t> state(num_parties);
-  std::vector<state_t> newstate(num_parties);
-  uint8_t roundconstant;
-  int i;
-  int j;
-  int r;
-  int party;
-  int sbox_index = 0;
-  int first_party = 0;
-
-  for (j = 0; j < 6; ++j)
-    for (i = 0; i < 4; ++i)
-      for (party = 0; party < num_parties; party++)
-        expanded[party][i][j] = key_in[party][j * 4 + i];
-
-  roundconstant = 1;
-  for (j = 6; j < 52; ++j) {
-    std::vector<temp_t> temp(num_parties);
-    if (j % 6)
-      for (i = 0; i < 4; ++i)
-        for (party = 0; party < num_parties; party++)
-          temp[party][i] = expanded[party][i][j - 1];
-    else {
-      for (i = 0; i < 4; ++i) {
-        for (party = 0; party < num_parties; party++) {
-          unsigned char s = expanded[party][(i + 1) % 4][j - 1];
-          s_shares[party][sbox_index] = s;
-          temp[party][i] = bytesub_restore(t_shares[party][sbox_index]);
-        }
-        temp[0][i] ^= AES_SBOX_AFFINE_CONST;
-        sbox_index++;
-      }
-      temp[first_party][0] ^= roundconstant;
-      roundconstant = xtime(roundconstant);
-    }
-    for (i = 0; i < 4; ++i)
-      for (party = 0; party < num_parties; party++) {
-        expanded[party][i][j] = temp[party][i] ^ expanded[party][i][j - 6];
-      }
-  }
-
-  for (size_t k = 0; k < AES192::NUM_BLOCKS; k++) {
-    for (j = 0; j < 4; ++j)
-      for (i = 0; i < 4; ++i) {
-        state[first_party][i][j] =
-            plaintext_in[k * AES192::BLOCK_SIZE + j * 4 + i] ^
-            expanded[first_party][i][j];
-        for (party = 1; party < num_parties; party++) {
-          state[party][i][j] = expanded[party][i][j];
-        }
-      }
-
-    for (r = 0; r < 12; ++r) {
-      for (i = 0; i < 4; ++i)
-        for (j = 0; j < 4; ++j) {
-          for (party = 0; party < num_parties; party++) {
-            s_shares[party][sbox_index] = state[party][i][j];
-            newstate[party][i][j] =
-                bytesub_restore(t_shares[party][sbox_index]);
-          }
-          newstate[0][i][j] ^= AES_SBOX_AFFINE_CONST;
-          sbox_index++;
-        }
-      for (i = 0; i < 4; ++i)
-        for (j = 0; j < 4; ++j)
-          for (party = 0; party < num_parties; party++) {
-            state[party][i][j] = newstate[party][i][(j + i) % 4];
-          }
-      if (r < 11)
-        for (j = 0; j < 4; ++j) {
-          for (party = 0; party < num_parties; party++) {
-            unsigned char a0 = state[party][0][j];
-            unsigned char a1 = state[party][1][j];
-            unsigned char a2 = state[party][2][j];
-            unsigned char a3 = state[party][3][j];
-            state[party][0][j] = xtime(a0 ^ a1) ^ a1 ^ a2 ^ a3;
-            state[party][1][j] = xtime(a1 ^ a2) ^ a2 ^ a3 ^ a0;
-            state[party][2][j] = xtime(a2 ^ a3) ^ a3 ^ a0 ^ a1;
-            state[party][3][j] = xtime(a3 ^ a0) ^ a0 ^ a1 ^ a2;
-          }
-        }
-      for (i = 0; i < 4; ++i)
-        for (j = 0; j < 4; ++j)
-          for (party = 0; party < num_parties; party++) {
-            state[party][i][j] ^= expanded[party][i][r * 4 + 4 + j];
-          }
-    }
-
-    for (party = 0; party < num_parties; party++) {
-      for (j = 0; j < 4; ++j)
-        for (i = 0; i < 4; ++i)
-          ciphertext_out[party][k * AES192::BLOCK_SIZE + j * 4 + i] =
-              state[party][i][j];
-    }
-  }
-}
 } // namespace AES192
 
 namespace AES256 {
-bool aes_256_old(const unsigned char *key, const unsigned char *plaintext,
-                 unsigned char *ciphertext) {
-  unsigned char expanded[4][60];
-  unsigned char state[4][4];
-  unsigned char newstate[4][4];
-  unsigned char roundconstant;
-  int i;
-  int j;
-  int r;
 
-  for (j = 0; j < 8; ++j)
-    for (i = 0; i < 4; ++i)
-      expanded[i][j] = key[j * 4 + i];
+static bool AES_256_Key_Expansion(const unsigned char *userkey,
+                                  __m128i *Key_Schedule) {
+  __m128i temp1, temp2, temp3;
+  temp1 = _mm_loadu_si128((__m128i *)userkey);
+  temp3 = _mm_loadu_si128((__m128i *)(userkey + 16));
+  Key_Schedule[0] = temp1;
+  Key_Schedule[1] = temp3;
+  check_for_zeros_KS(temp3);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x01);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[2] = temp1;
+  check_for_zeros_KS(temp1);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[3] = temp3;
+  check_for_zeros_KS(temp3);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x02);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[4] = temp1;
+  check_for_zeros_KS(temp1);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[5] = temp3;
+  check_for_zeros_KS(temp3);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x04);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[6] = temp1;
+  check_for_zeros_KS(temp1);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[7] = temp3;
+  check_for_zeros_KS(temp3);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x08);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[8] = temp1;
+  check_for_zeros_KS(temp1);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[9] = temp3;
+  check_for_zeros_KS(temp3);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x10);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[10] = temp1;
+  check_for_zeros_KS(temp1);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[11] = temp3;
+  check_for_zeros_KS(temp3);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x20);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[12] = temp1;
+  check_for_zeros_KS(temp1);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[13] = temp3;
+  check_for_zeros_KS(temp3);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x40);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[14] = temp1;
+  return true;
+}
+static bool aes_256_aesni(const uint8_t *key, const uint8_t *plaintext,
+                          uint8_t *ciphertext) {
+  __m128i key_schedule[15];
+  if (!AES_256_Key_Expansion(key, key_schedule))
+    return false;
 
-  roundconstant = 1;
-  for (j = 8; j < 60; ++j) {
-    unsigned char temp[4];
-    if (j % 4)
-      for (i = 0; i < 4; ++i)
-        temp[i] = expanded[i][j - 1];
-    else if (j % 8)
-      for (i = 0; i < 4; ++i) {
-        if (expanded[i][j - 1] == 0)
-          return false;
-        temp[i] = bytesub(expanded[i][j - 1]);
-      }
-    else {
-      for (i = 0; i < 4; ++i) {
-        if (expanded[(i + 1) % 4][j - 1] == 0)
-          return false;
-        temp[i] = bytesub(expanded[(i + 1) % 4][j - 1]);
-      }
-      temp[0] ^= roundconstant;
-      roundconstant = xtime(roundconstant);
-    }
-    for (i = 0; i < 4; ++i)
-      expanded[i][j] = temp[i] ^ expanded[i][j - 8];
-  }
+  __m128i m = _mm_loadu_si128((__m128i *)plaintext);
+  m = _mm_xor_si128(m, key_schedule[0]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[1]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[2]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[3]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[4]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[5]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[6]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[7]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[8]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[9]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[10]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[11]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[12]);
+  check_for_zeros(m);
+  m = _mm_aesenc_si128(m, key_schedule[13]);
+  check_for_zeros(m);
+  m = _mm_aesenclast_si128(m, key_schedule[14]);
 
-  for (j = 0; j < 4; ++j)
-    for (i = 0; i < 4; ++i)
-      state[i][j] = plaintext[j * 4 + i] ^ expanded[i][j];
-
-  for (r = 0; r < 14; ++r) {
-    for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j) {
-        if (state[i][j] == 0)
-          return false;
-        newstate[i][j] = bytesub(state[i][j]);
-      }
-    for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j)
-        state[i][j] = newstate[i][(j + i) % 4];
-    if (r < 13)
-      for (j = 0; j < 4; ++j) {
-        unsigned char a0 = state[0][j];
-        unsigned char a1 = state[1][j];
-        unsigned char a2 = state[2][j];
-        unsigned char a3 = state[3][j];
-        state[0][j] = xtime(a0 ^ a1) ^ a1 ^ a2 ^ a3;
-        state[1][j] = xtime(a1 ^ a2) ^ a2 ^ a3 ^ a0;
-        state[2][j] = xtime(a2 ^ a3) ^ a3 ^ a0 ^ a1;
-        state[3][j] = xtime(a3 ^ a0) ^ a0 ^ a1 ^ a2;
-      }
-    for (i = 0; i < 4; ++i)
-      for (j = 0; j < 4; ++j)
-        state[i][j] ^= expanded[i][r * 4 + 4 + j];
-  }
-
-  for (j = 0; j < 4; ++j)
-    for (i = 0; i < 4; ++i)
-      ciphertext[j * 4 + i] = state[i][j];
+  _mm_storeu_si128((__m128i *)ciphertext, m);
 
   return true;
 }
-
-bool aes_256_save_sbox_state(
-    const unsigned char *key, const unsigned char *plaintext,
-    unsigned char *ciphertext,
+static bool AES_256_Key_Expansion_save(
+    const unsigned char *userkey, __m128i *Key_Schedule,
     std::pair<std::vector<uint8_t>, std::vector<uint8_t>> &saved_sbox_state) {
-  unsigned char expanded[4][60];
-  unsigned char state[4][4];
-  unsigned char newstate[4][4];
-  unsigned char roundconstant;
-  int i;
-  int j;
-  int r;
 
-  for (j = 0; j < 8; ++j)
-    for (i = 0; i < 4; ++i)
-      expanded[i][j] = key[j * 4 + i];
-
-  roundconstant = 1;
-  for (j = 8; j < 60; ++j) {
-    unsigned char temp[4];
-    if (j % 4)
-      for (i = 0; i < 4; ++i)
-        temp[i] = expanded[i][j - 1];
-    else if (j % 8)
-      for (i = 0; i < 4; ++i) {
-        if (expanded[i][j - 1] == 0)
-          return false;
-        std::pair<uint8_t, uint8_t> sbox_state;
-        temp[i] = bytesub_save(expanded[i][j - 1], sbox_state);
-        saved_sbox_state.first.push_back(sbox_state.first);
-        saved_sbox_state.second.push_back(sbox_state.second);
-      }
-    else {
-      for (i = 0; i < 4; ++i) {
-        if (expanded[(i + 1) % 4][j - 1] == 0)
-          return false;
-        std::pair<uint8_t, uint8_t> sbox_state;
-        temp[i] = bytesub_save(expanded[(i + 1) % 4][j - 1], sbox_state);
-        saved_sbox_state.first.push_back(sbox_state.first);
-        saved_sbox_state.second.push_back(sbox_state.second);
-      }
-      temp[0] ^= roundconstant;
-      roundconstant = xtime(roundconstant);
-    }
-    for (i = 0; i < 4; ++i)
-      expanded[i][j] = temp[i] ^ expanded[i][j - 8];
-  }
+  __m128i temp1, temp2, temp3;
+  temp1 = _mm_loadu_si128((__m128i *)userkey);
+  temp3 = _mm_loadu_si128((__m128i *)(userkey + 16));
+  Key_Schedule[0] = temp1;
+  Key_Schedule[1] = temp3;
+  check_for_zeros_and_save_KS(temp3, saved_sbox_state);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x01);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[2] = temp1;
+  check_for_zeros_and_save_KS_256(temp1, saved_sbox_state);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[3] = temp3;
+  check_for_zeros_and_save_KS(temp3, saved_sbox_state);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x02);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[4] = temp1;
+  check_for_zeros_and_save_KS_256(temp1, saved_sbox_state);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[5] = temp3;
+  check_for_zeros_and_save_KS(temp3, saved_sbox_state);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x04);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[6] = temp1;
+  check_for_zeros_and_save_KS_256(temp1, saved_sbox_state);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[7] = temp3;
+  check_for_zeros_and_save_KS(temp3, saved_sbox_state);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x08);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[8] = temp1;
+  check_for_zeros_and_save_KS_256(temp1, saved_sbox_state);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[9] = temp3;
+  check_for_zeros_and_save_KS(temp3, saved_sbox_state);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x10);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[10] = temp1;
+  check_for_zeros_and_save_KS_256(temp1, saved_sbox_state);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[11] = temp3;
+  check_for_zeros_and_save_KS(temp3, saved_sbox_state);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x20);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[12] = temp1;
+  check_for_zeros_and_save_KS_256(temp1, saved_sbox_state);
+  KEY_256_ASSIST_2(_mm_aeskeygenassist_si128(temp1, 0x0), &temp3);
+  Key_Schedule[13] = temp3;
+  check_for_zeros_and_save_KS(temp3, saved_sbox_state);
+  temp2 = _mm_aeskeygenassist_si128(temp3, 0x40);
+  KEY_256_ASSIST_1(&temp1, &temp2);
+  Key_Schedule[14] = temp1;
+  return true;
+}
+static bool aes_256_save_sbox_state_aesni(
+    const uint8_t *key, const uint8_t *plaintext, uint8_t *ciphertext,
+    std::pair<std::vector<uint8_t>, std::vector<uint8_t>> &saved_sbox_state) {
+  __m128i key_schedule[15];
+  if (!AES_256_Key_Expansion_save(key, key_schedule, saved_sbox_state))
+    return false;
 
   for (size_t k = 0; k < AES256::NUM_BLOCKS; k++) {
-    for (j = 0; j < 4; ++j)
-      for (i = 0; i < 4; ++i)
-        state[i][j] =
-            plaintext[k * AES256::BLOCK_SIZE + j * 4 + i] ^ expanded[i][j];
+    __m128i m =
+        _mm_loadu_si128((__m128i *)(plaintext + k * AES256::BLOCK_SIZE));
+    m = _mm_xor_si128(m, key_schedule[0]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[1]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[2]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[3]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[4]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[5]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[6]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[7]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[8]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[9]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[10]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[11]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[12]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenc_si128(m, key_schedule[13]);
+    check_for_zeros_and_save(m, saved_sbox_state);
+    m = _mm_aesenclast_si128(m, key_schedule[14]);
 
-    for (r = 0; r < 14; ++r) {
-      for (i = 0; i < 4; ++i)
-        for (j = 0; j < 4; ++j) {
-          if (state[i][j] == 0)
-            return false;
-          std::pair<uint8_t, uint8_t> sbox_state;
-          newstate[i][j] = bytesub_save(state[i][j], sbox_state);
-          saved_sbox_state.first.push_back(sbox_state.first);
-          saved_sbox_state.second.push_back(sbox_state.second);
-        }
-      for (i = 0; i < 4; ++i)
-        for (j = 0; j < 4; ++j)
-          state[i][j] = newstate[i][(j + i) % 4];
-      if (r < 13)
-        for (j = 0; j < 4; ++j) {
-          unsigned char a0 = state[0][j];
-          unsigned char a1 = state[1][j];
-          unsigned char a2 = state[2][j];
-          unsigned char a3 = state[3][j];
-          state[0][j] = xtime(a0 ^ a1) ^ a1 ^ a2 ^ a3;
-          state[1][j] = xtime(a1 ^ a2) ^ a2 ^ a3 ^ a0;
-          state[2][j] = xtime(a2 ^ a3) ^ a3 ^ a0 ^ a1;
-          state[3][j] = xtime(a3 ^ a0) ^ a0 ^ a1 ^ a2;
-        }
-      for (i = 0; i < 4; ++i)
-        for (j = 0; j < 4; ++j)
-          state[i][j] ^= expanded[i][r * 4 + 4 + j];
-    }
-
-    for (j = 0; j < 4; ++j)
-      for (i = 0; i < 4; ++i)
-        ciphertext[k * AES256::BLOCK_SIZE + j * 4 + i] = state[i][j];
+    _mm_storeu_si128((__m128i *)(ciphertext + k * AES256::BLOCK_SIZE), m);
   }
 
   return true;
 }
+
 bool aes_256(const std::vector<uint8_t> &key_in,
              const std::vector<uint8_t> &plaintext_in,
              std::vector<uint8_t> &ciphertext_out) {
@@ -1380,9 +1259,9 @@ bool aes_256(const std::vector<uint8_t> &key_in,
   assert(plaintext_in.size() == AES256::BLOCK_SIZE * AES256::NUM_BLOCKS);
   ciphertext_out.resize(AES128::BLOCK_SIZE * AES256::NUM_BLOCKS);
   bool ok =
-      aes_256_old(key_in.data(), plaintext_in.data(), ciphertext_out.data());
-  ok = aes_256_old(key_in.data(), plaintext_in.data() + AES256::BLOCK_SIZE,
-                   ciphertext_out.data() + AES256::BLOCK_SIZE) &&
+      aes_256_aesni(key_in.data(), plaintext_in.data(), ciphertext_out.data());
+  ok = aes_256_aesni(key_in.data(), plaintext_in.data() + AES256::BLOCK_SIZE,
+                     ciphertext_out.data() + AES256::BLOCK_SIZE) &&
        ok;
   return ok;
 }
@@ -1396,11 +1275,9 @@ aes_256_with_sbox_output(const std::vector<uint8_t> &key_in,
   result.first.reserve(AES256::NUM_SBOXES);
   result.second.reserve(AES256::NUM_SBOXES);
   ciphertext_out.resize(AES256::BLOCK_SIZE * AES256::NUM_BLOCKS);
-  bool ret = aes_256_save_sbox_state(key_in.data(), plaintext_in.data(),
-                                     ciphertext_out.data(), result);
+  bool ret = aes_256_save_sbox_state_aesni(key_in.data(), plaintext_in.data(),
+                                           ciphertext_out.data(), result);
 
-  // remove duplicated keyschedule from saved sbox values
-  // keyschedule = 52 sboxes, rounds = 224 delete from
   (void)ret;
   assert(ret);
   return result;
@@ -1411,6 +1288,196 @@ void aes_256_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
                       const std::vector<uint8_t> &plaintext_in,
                       std::vector<gsl::span<uint8_t>> &ciphertext_out,
                       std::vector<gsl::span<uint8_t>> &s_shares) {
+
+  typedef std::array<__m128i, 15> expanded_key_t;
+  int num_parties = key_in.size();
+  std::vector<expanded_key_t> key_schedule(num_parties);
+  __m128i state;
+  int party = 0;
+  int sbox_index = 0;
+  // first party do normal sbox + rcon
+  {
+    __m128i temp1, temp2, temp3;
+    temp1 = _mm_loadu_si128((__m128i *)key_in[party].data());
+    temp3 = _mm_loadu_si128((__m128i *)(key_in[party].data() + 16));
+    key_schedule[party][0] = temp1;
+    key_schedule[party][1] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            AES_SBOX_AFFINE_CONST, 0x01);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][2] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, AES_SBOX_AFFINE_CONST);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][3] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            AES_SBOX_AFFINE_CONST, 0x02);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][4] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, AES_SBOX_AFFINE_CONST);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][5] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            AES_SBOX_AFFINE_CONST, 0x04);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][6] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, AES_SBOX_AFFINE_CONST);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][7] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            AES_SBOX_AFFINE_CONST, 0x08);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][8] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, AES_SBOX_AFFINE_CONST);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][9] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            AES_SBOX_AFFINE_CONST, 0x10);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][10] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, AES_SBOX_AFFINE_CONST);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][11] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            AES_SBOX_AFFINE_CONST, 0x20);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][12] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, AES_SBOX_AFFINE_CONST);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][13] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            AES_SBOX_AFFINE_CONST, 0x40);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][14] = temp1;
+  }
+  // other parties do not add rcon or affine part of sbox
+  for (party = 1; party < num_parties; party++) {
+    sbox_index = 0;
+    __m128i temp1, temp2, temp3;
+    temp1 = _mm_loadu_si128((__m128i *)key_in[party].data());
+    temp3 = _mm_loadu_si128((__m128i *)(key_in[party].data() + 16));
+    key_schedule[party][0] = temp1;
+    key_schedule[party][1] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            0x0, 0x0);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][2] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, 0x0);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][3] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            0x0, 0x00);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][4] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, 0x0);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][5] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            0x0, 0x0);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][6] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, 0x0);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][7] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            0x0, 0x0);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][8] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, 0x0);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][9] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            0x0, 0x0);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][10] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, 0x0);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][11] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            0x0, 0x0);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][12] = temp1;
+    AES_256_key_exp_restore_2(temp2, temp1, s_shares, t_shares, party,
+                              sbox_index, 0x0);
+    KEY_256_ASSIST_2(temp2, &temp3);
+    key_schedule[party][13] = temp3;
+    AES_256_key_exp_restore(temp2, temp3, s_shares, t_shares, party, sbox_index,
+                            0x0, 0x0);
+    KEY_256_ASSIST_1(&temp1, &temp2);
+    key_schedule[party][14] = temp1;
+  }
+  for (size_t k = 0; k < AES256::NUM_BLOCKS; k++) {
+    for (party = 0; party < num_parties; party++) {
+      sbox_index = 52 + k * 224;
+      if (party == 0)
+        state = _mm_loadu_si128(
+            (__m128i *)(plaintext_in.data() + k * AES256::BLOCK_SIZE));
+      else
+        state = _mm_setzero_si128();
+      state = _mm_xor_si128(state, key_schedule[party][0]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][1]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][2]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][3]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][4]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][5]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][6]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][7]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][8]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][9]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][10]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][11]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][12]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_aesimc_si128(_mm_aesimc_si128(_mm_aesimc_si128(state)));
+      state = _mm_xor_si128(state, key_schedule[party][13]);
+      restore_t_shares(state, s_shares, t_shares, party, sbox_index);
+      state = _mm_xor_si128(state, key_schedule[party][14]);
+
+      _mm_storeu_si128(
+          (__m128i *)(ciphertext_out[party].data() + k * AES256::BLOCK_SIZE),
+          state);
+    }
+  }
+}
+void aes_256_s_shares1(const std::vector<gsl::span<uint8_t>> &key_in,
+                       const std::vector<gsl::span<uint8_t>> &t_shares,
+                       const std::vector<uint8_t> &plaintext_in,
+                       std::vector<gsl::span<uint8_t>> &ciphertext_out,
+                       std::vector<gsl::span<uint8_t>> &s_shares) {
 
   typedef std::array<std::array<uint8_t, 60>, 4> expanded_key_t;
   typedef std::array<std::array<uint8_t, 4>, 4> state_t;

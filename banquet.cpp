@@ -444,6 +444,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     else
       throw std::runtime_error("invalid parameters");
 
+#ifndef NDEBUG
     // sanity check, mpc execution = plain one
     std::vector<uint8_t> ct_check(instance.aes_params.block_size *
                                   instance.aes_params.num_blocks);
@@ -455,6 +456,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     }
 
     assert(ct == ct_check);
+#endif
     rep_t_deltas.push_back(t_deltas);
   }
 
@@ -763,7 +765,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       accum += a[repetition][j] * b[repetition][j];
     }
     if (accum != c[repetition])
-      throw std::runtime_error("something wrong here");
+      throw std::runtime_error("final sanity check is wrong");
     proofs.push_back(proof);
   }
 
