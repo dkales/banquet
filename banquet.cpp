@@ -47,10 +47,11 @@ generate_salt_and_seeds(const banquet_instance_t &instance,
   return std::make_pair(salt, seeds);
 }
 
-std::vector<uint8_t> commit_to_party_seed(const banquet_instance_t &instance,
-                                          const std::vector<uint8_t> &seed,
-                                          const banquet_salt_t &salt,
-                                          size_t rep_idx, size_t party_idx) {
+void commit_to_party_seed(const banquet_instance_t &instance,
+                          // const gsl::span<uint8_t> &seed,
+                          const std::vector<uint8_t> &seed,
+                          const banquet_salt_t &salt, size_t rep_idx,
+                          size_t party_idx, gsl::span<uint8_t> commitment) {
   hash_context ctx;
   hash_init(&ctx, instance.digest_size);
   hash_update(&ctx, salt.data(), salt.size());
@@ -59,18 +60,39 @@ std::vector<uint8_t> commit_to_party_seed(const banquet_instance_t &instance,
   hash_update(&ctx, seed.data(), seed.size());
   hash_final(&ctx);
 
-  std::vector<uint8_t> commitment(instance.digest_size);
   hash_squeeze(&ctx, commitment.data(), commitment.size());
-  return commitment;
 }
 
-std::vector<uint8_t> phase_1_commitment(
-    const banquet_instance_t &instance, const banquet_salt_t &salt,
-    const std::vector<uint8_t> &pk, const uint8_t *message, size_t message_len,
-    const std::vector<std::vector<std::vector<uint8_t>>> &commitments,
-    const std::vector<std::vector<uint8_t>> &key_deltas,
-    const std::vector<std::vector<uint8_t>> &t_deltas,
-    RepByteContainer &output_broadcasts) {
+void commit_to_4_party_seeds(
+    const banquet_instance_t &instance, const std::vector<uint8_t> &seed0,
+    const std::vector<uint8_t> &seed1, const std::vector<uint8_t> &seed2,
+    const std::vector<uint8_t> &seed3, const banquet_salt_t &salt,
+    size_t rep_idx, size_t party_idx, gsl::span<uint8_t> com0,
+    gsl::span<uint8_t> com1, gsl::span<uint8_t> com2, gsl::span<uint8_t> com3) {
+  hash_context_x4 ctx;
+  hash_init_x4(&ctx, instance.digest_size);
+  hash_update_x4_1(&ctx, salt.data(), salt.size());
+  hash_update_x4_uint16_le(&ctx, (uint16_t)rep_idx);
+  const uint16_t party_idxs[4] = {
+      (uint16_t)party_idx, (uint16_t)(party_idx + 1), (uint16_t)(party_idx + 2),
+      (uint16_t)(party_idx + 3)};
+  hash_update_x4_uint16s_le(&ctx, party_idxs);
+  hash_update_x4_4(&ctx, seed0.data(), seed1.data(), seed2.data(), seed3.data(),
+                   instance.seed_size);
+  hash_final_x4(&ctx);
+
+  hash_squeeze_x4_4(&ctx, com0.data(), com1.data(), com2.data(), com3.data(),
+                    instance.digest_size);
+}
+
+std::vector<uint8_t>
+phase_1_commitment(const banquet_instance_t &instance,
+                   const banquet_salt_t &salt, const std::vector<uint8_t> &pk,
+                   const uint8_t *message, size_t message_len,
+                   const RepByteContainer &commitments,
+                   const std::vector<std::vector<uint8_t>> &key_deltas,
+                   const std::vector<std::vector<uint8_t>> &t_deltas,
+                   const RepByteContainer &output_broadcasts) {
 
   hash_context ctx;
   hash_init_prefix(&ctx, instance.digest_size, HASH_PREFIX_1);
@@ -80,8 +102,8 @@ std::vector<uint8_t> phase_1_commitment(
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      hash_update(&ctx, commitments[repetition][party].data(),
-                  commitments[repetition][party].size());
+      auto commitment = commitments.get(repetition, party);
+      hash_update(&ctx, commitment.data(), commitment.size());
       auto output_broadcast = output_broadcasts.get(repetition, party);
       hash_update(&ctx, output_broadcast.data(), output_broadcast.size());
     }
@@ -307,7 +329,9 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   // create seed trees and random tapes
   std::vector<SeedTree> seed_trees;
   std::vector<std::vector<RandomTape>> random_tapes;
-  std::vector<std::vector<std::vector<uint8_t>>> party_seed_commitments;
+
+  RepByteContainer party_seed_commitments(
+      instance.num_rounds, instance.num_MPC_parties, instance.digest_size);
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     // generate seed tree for the N parties
@@ -315,13 +339,25 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
                                   instance.num_MPC_parties, salt, repetition));
 
     // commit to each party's seed;
-    std::vector<std::vector<uint8_t>> current_party_seed_commitments;
-    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      current_party_seed_commitments.push_back(commit_to_party_seed(
-          instance, seed_trees[repetition].get_leaf(party).value(), salt,
-          repetition, party));
+    {
+      size_t party = 0;
+      for (; party < (instance.num_MPC_parties / 4) * 4; party += 4) {
+        commit_to_4_party_seeds(
+            instance, seed_trees[repetition].get_leaf(party).value(),
+            seed_trees[repetition].get_leaf(party + 1).value(),
+            seed_trees[repetition].get_leaf(party + 2).value(),
+            seed_trees[repetition].get_leaf(party + 3).value(), salt,
+            repetition, party, party_seed_commitments.get(repetition, party),
+            party_seed_commitments.get(repetition, party + 1),
+            party_seed_commitments.get(repetition, party + 2),
+            party_seed_commitments.get(repetition, party + 3));
+      }
+      for (; party < instance.num_MPC_parties; party++) {
+        commit_to_party_seed(
+            instance, seed_trees[repetition].get_leaf(party).value(), salt,
+            repetition, party, party_seed_commitments.get(repetition, party));
+      }
     }
-    party_seed_commitments.push_back(current_party_seed_commitments);
 
     // create random tape for each party
     std::vector<RandomTape> party_tapes;
@@ -460,16 +496,17 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   std::vector<std::vector<field::GF2E>> P_deltas(instance.num_rounds);
 
   // polynomials for adjusting last S evaluation
-  std::vector<field::GF2E> last_lagrange = precomputation_for_zero_to_m2[instance.m2];
+  std::vector<field::GF2E> last_lagrange =
+      precomputation_for_zero_to_m2[instance.m2];
   std::vector<field::GF2E> last_lagrange_sq = last_lagrange * last_lagrange;
 
   // vectors of intermediate product polynomials for computing P
-  std::vector<std::vector<field::GF2E> > ST_products(instance.m1);
-  std::vector<std::vector<field::GF2E> > S_lag_products(instance.m1);
-  std::vector<std::vector<field::GF2E> > T_lag_products(instance.m1);
+  std::vector<std::vector<field::GF2E>> ST_products(instance.m1);
+  std::vector<std::vector<field::GF2E>> S_lag_products(instance.m1);
+  std::vector<std::vector<field::GF2E>> T_lag_products(instance.m1);
 
-  std::vector<std::vector<field::GF2E> > s_random_points(instance.num_rounds),
-    t_random_points(instance.num_rounds);
+  std::vector<std::vector<field::GF2E>> s_random_points(instance.num_rounds),
+      t_random_points(instance.num_rounds);
 
   // rearrange s-box values into polynomials
   for (size_t j = 0; j < instance.m1; j++) {
@@ -483,9 +520,11 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     S_poly[instance.m2] = 0;
     T_poly[instance.m2] = 0;
 
-    S_poly = field::interpolate_with_precomputation(precomputation_for_zero_to_m2, S_poly);
-    T_poly = field::interpolate_with_precomputation(precomputation_for_zero_to_m2, T_poly);
-    
+    S_poly = field::interpolate_with_precomputation(
+        precomputation_for_zero_to_m2, S_poly);
+    T_poly = field::interpolate_with_precomputation(
+        precomputation_for_zero_to_m2, T_poly);
+
     ST_products[j] = S_poly * T_poly;
     S_lag_products[j] = S_poly * last_lagrange;
     T_lag_products[j] = T_poly * last_lagrange;
@@ -558,13 +597,15 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     std::vector<field::GF2E> P(2 * instance.m2 + 1);
 
     for (size_t j = 0; j < instance.m1; j++) {
-      // Note: we only multiply r_ej by the "S" part of the equation below, not the entire thing.
-      // This corresponds to first randomizing the s-boxes by r_ej, and then incorporating the random point
+      // Note: we only multiply r_ej by the "S" part of the equation below, not
+      // the entire thing. This corresponds to first randomizing the s-boxes by
+      // r_ej, and then incorporating the random point
       P += r_ejs[repetition][j] *
-        (ST_products[j] +
-        t_random_points[repetition][j] * S_lag_products[j]) + 
-        s_random_points[repetition][j] * T_lag_products[j] + 
-        last_lagrange_sq * s_random_points[repetition][j] * t_random_points[repetition][j];
+               (ST_products[j] +
+                t_random_points[repetition][j] * S_lag_products[j]) +
+           s_random_points[repetition][j] * T_lag_products[j] +
+           last_lagrange_sq * s_random_points[repetition][j] *
+               t_random_points[repetition][j];
     }
     P_e[repetition] = P;
 
@@ -707,9 +748,14 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   std::vector<banquet_repetition_proof_t> proofs;
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     size_t missing_party = missing_parties[repetition];
+    std::vector<uint8_t> commitment(instance.digest_size);
+    auto missing_commitment =
+        party_seed_commitments.get(repetition, missing_party);
+    std::copy(std::begin(missing_commitment), std::end(missing_commitment),
+              std::begin(commitment));
     banquet_repetition_proof_t proof{
         seeds[repetition],
-        party_seed_commitments[repetition][missing_party],
+        commitment,
         rep_key_deltas[repetition],
         rep_t_deltas[repetition],
         P_deltas[repetition],
@@ -753,7 +799,8 @@ bool banquet_verify(const banquet_instance_t &instance,
   // create seed trees and random tapes
   std::vector<SeedTree> seed_trees;
   std::vector<std::vector<RandomTape>> random_tapes;
-  std::vector<std::vector<std::vector<uint8_t>>> party_seed_commitments;
+  RepByteContainer party_seed_commitments(
+      instance.num_rounds, instance.num_MPC_parties, instance.digest_size);
 
   // recompute h_2
   std::vector<std::vector<field::GF2E>> P_deltas;
@@ -787,17 +834,33 @@ bool banquet_verify(const banquet_instance_t &instance,
     seed_trees.push_back(SeedTree(proof.reveallist, instance.num_MPC_parties,
                                   signature.salt, repetition));
     // commit to each party's seed, fill up missing one with data from proof
-    std::vector<std::vector<uint8_t>> current_party_seed_commitments;
-    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      if (party != missing_parties[repetition]) {
-        current_party_seed_commitments.push_back(commit_to_party_seed(
-            instance, seed_trees[repetition].get_leaf(party).value(),
-            signature.salt, repetition, party));
-      } else {
-        current_party_seed_commitments.push_back(proof.C_e);
+    {
+      std::vector<uint8_t> dummy(instance.seed_size);
+      size_t party = 0;
+      for (; party < (instance.num_MPC_parties / 4) * 4; party += 4) {
+        auto seed0 = seed_trees[repetition].get_leaf(party).value_or(dummy);
+        auto seed1 = seed_trees[repetition].get_leaf(party + 1).value_or(dummy);
+        auto seed2 = seed_trees[repetition].get_leaf(party + 2).value_or(dummy);
+        auto seed3 = seed_trees[repetition].get_leaf(party + 3).value_or(dummy);
+        commit_to_4_party_seeds(
+            instance, seed0, seed1, seed2, seed3, signature.salt, repetition,
+            party, party_seed_commitments.get(repetition, party),
+            party_seed_commitments.get(repetition, party + 1),
+            party_seed_commitments.get(repetition, party + 2),
+            party_seed_commitments.get(repetition, party + 3));
+      }
+      for (; party < instance.num_MPC_parties; party++) {
+        if (party != missing_parties[repetition]) {
+          commit_to_party_seed(instance,
+                               seed_trees[repetition].get_leaf(party).value(),
+                               signature.salt, repetition, party,
+                               party_seed_commitments.get(repetition, party));
+        }
       }
     }
-    party_seed_commitments.push_back(current_party_seed_commitments);
+    auto com =
+        party_seed_commitments.get(repetition, missing_parties[repetition]);
+    std::copy(std::begin(proof.C_e), std::end(proof.C_e), std::begin(com));
 
     // create random tape for each party, dummy one for missing party
     std::vector<RandomTape> party_tapes;
