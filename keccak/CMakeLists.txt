@@ -2,8 +2,10 @@ cmake_minimum_required(VERSION 3.4.1)
 project(Keccak C ASM)
 
 set(KECCAK_SRCS
-  KeccakSpongeWidth1600.c
   KeccakHash.c
+  KeccakSponge.c
+  KeccakSpongetimes4.c
+  KeccakHashtimes4.c
   )
 
 
@@ -20,11 +22,13 @@ set(USE_AVX2 ${DEFAULT_USE_AVX2} CACHE BOOL "USE AVX2 version.")
 if (USE_AVX2)
   set(KECCAK_SRCS ${KECCAK_SRCS}
     avx2/KeccakP-1600-AVX2.s
+    avx2/KeccakP-1600-times4-SIMD256.c
     )
   set_property(SOURCE avx2/KeccakP-1600-AVX2.s PROPERTY COMPILE_FLAGS "-x assembler-with-cpp")
 else ()
   set(KECCAK_SRCS ${KECCAK_SRCS}
     opt64/KeccakP-1600-opt64.c
+    opt64/KeccakP-1600-times4-on1.c
     )
 endif ()
 
