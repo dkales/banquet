@@ -48,8 +48,7 @@ generate_salt_and_seeds(const banquet_instance_t &instance,
 }
 
 void commit_to_party_seed(const banquet_instance_t &instance,
-                          // const gsl::span<uint8_t> &seed,
-                          const std::vector<uint8_t> &seed,
+                          const gsl::span<uint8_t> &seed,
                           const banquet_salt_t &salt, size_t rep_idx,
                           size_t party_idx, gsl::span<uint8_t> commitment) {
   hash_context ctx;
@@ -64,11 +63,11 @@ void commit_to_party_seed(const banquet_instance_t &instance,
 }
 
 void commit_to_4_party_seeds(
-    const banquet_instance_t &instance, const std::vector<uint8_t> &seed0,
-    const std::vector<uint8_t> &seed1, const std::vector<uint8_t> &seed2,
-    const std::vector<uint8_t> &seed3, const banquet_salt_t &salt,
-    size_t rep_idx, size_t party_idx, gsl::span<uint8_t> com0,
-    gsl::span<uint8_t> com1, gsl::span<uint8_t> com2, gsl::span<uint8_t> com3) {
+    const banquet_instance_t &instance, const gsl::span<uint8_t> &seed0,
+    const gsl::span<uint8_t> &seed1, const gsl::span<uint8_t> &seed2,
+    const gsl::span<uint8_t> &seed3, const banquet_salt_t &salt, size_t rep_idx,
+    size_t party_idx, gsl::span<uint8_t> com0, gsl::span<uint8_t> com1,
+    gsl::span<uint8_t> com2, gsl::span<uint8_t> com3) {
   hash_context_x4 ctx;
   hash_init_x4(&ctx, instance.digest_size);
   hash_update_x4_1(&ctx, salt.data(), salt.size());
@@ -870,8 +869,9 @@ bool banquet_verify(const banquet_instance_t &instance,
         party_tapes.emplace_back(seed_trees[repetition].get_leaf(party).value(),
                                  signature.salt, repetition, party);
       } else {
-        party_tapes.emplace_back(std::vector<uint8_t>(instance.seed_size),
-                                 signature.salt, repetition, party);
+        std::vector<uint8_t> dummy(instance.seed_size);
+        party_tapes.emplace_back(gsl::span(dummy), signature.salt, repetition,
+                                 party);
       }
     }
     random_tapes.push_back(party_tapes);
