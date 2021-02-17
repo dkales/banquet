@@ -321,21 +321,23 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   auto [salt, master_seeds] =
       generate_salt_and_seeds(instance, keypair, message, message_len);
 
-  // buffer for squeezing field elements into
-  std::vector<uint8_t> lambda_sized_buffer(instance.lambda);
-
   // do parallel repetitions
   // create seed trees and random tapes
   std::vector<SeedTree> seed_trees;
-  std::vector<std::vector<RandomTape>> random_tapes;
+  seed_trees.reserve(instance.num_rounds);
+  size_t random_tape_size =
+      instance.aes_params.key_size + instance.aes_params.num_sboxes +
+      2 * instance.m1 * instance.lambda + (instance.m2 + 1) * instance.lambda;
+  RandomTapes random_tapes(instance.num_rounds, instance.num_MPC_parties,
+                           random_tape_size);
 
   RepByteContainer party_seed_commitments(
       instance.num_rounds, instance.num_MPC_parties, instance.digest_size);
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     // generate seed tree for the N parties
-    seed_trees.push_back(SeedTree(master_seeds[repetition],
-                                  instance.num_MPC_parties, salt, repetition));
+    seed_trees.emplace_back(master_seeds[repetition], instance.num_MPC_parties,
+                            salt, repetition);
 
     // commit to each party's seed;
     {
@@ -359,13 +361,11 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     }
 
     // create random tape for each party
-    std::vector<RandomTape> party_tapes;
-    party_tapes.reserve(instance.num_MPC_parties);
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      party_tapes.emplace_back(seed_trees[repetition].get_leaf(party).value(),
-                               salt, repetition, party);
+      random_tapes.generate_tape(
+          repetition, party, salt,
+          seed_trees[repetition].get_leaf(party).value());
     }
-    random_tapes.push_back(party_tapes);
   }
   /////////////////////////////////////////////////////////////////////////////
   // phase 1: commit to executions of AES
@@ -389,8 +389,11 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     std::vector<uint8_t> key_delta = key;
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       auto shared_key = rep_shared_keys.get(repetition, party);
-      random_tapes[repetition][party].squeeze_bytes(shared_key.data(),
-                                                    shared_key.size());
+      auto random_key_share =
+          random_tapes.get_bytes(repetition, party, 0, shared_key.size());
+      std::copy(std::begin(random_key_share), std::end(random_key_share),
+                std::begin(shared_key));
+
       std::transform(std::begin(shared_key), std::end(shared_key),
                      std::begin(key_delta), std::begin(key_delta),
                      std::bit_xor<uint8_t>());
@@ -407,8 +410,11 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
     std::vector<uint8_t> t_deltas = sbox_pairs.second;
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       auto shared_t = rep_shared_t.get(repetition, party);
-      random_tapes[repetition][party].squeeze_bytes(shared_t.data(),
-                                                    shared_t.size());
+      auto random_t_shares = random_tapes.get_bytes(
+          repetition, party, instance.aes_params.key_size,
+          instance.aes_params.num_sboxes);
+      std::copy(std::begin(random_t_shares), std::end(random_t_shares),
+                std::begin(shared_t));
       std::transform(std::begin(shared_t), std::end(shared_t),
                      std::begin(t_deltas), std::begin(t_deltas),
                      std::bit_xor<uint8_t>());
@@ -570,23 +576,18 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
         }
 
         // sample additional random points
-        random_tapes[repetition][party].squeeze_bytes(
-            lambda_sized_buffer.data(), lambda_sized_buffer.size());
-        s_bar[instance.m2].from_bytes(lambda_sized_buffer.data());
+        auto S_T_bar = random_tapes.get_bytes(
+            repetition, party,
+            instance.aes_params.key_size + instance.aes_params.num_sboxes +
+                j * 2 * instance.lambda,
+            2 * instance.lambda);
 
-        random_tapes[repetition][party].squeeze_bytes(
-            lambda_sized_buffer.data(), lambda_sized_buffer.size());
-        t_bar[instance.m2].from_bytes(lambda_sized_buffer.data());
+        s_bar[instance.m2].from_bytes(S_T_bar.data());
+        t_bar[instance.m2].from_bytes(S_T_bar.data() + instance.lambda);
 
         s_random_points[repetition][j] += s_bar[instance.m2];
         t_random_points[repetition][j] += t_bar[instance.m2];
 
-        // interpolate polynomials S_ej^i and T_ej^i
-        // S_eji[repetition][party][j] = utils::interpolate_with_precomputation(
-        // precomputation_for_zero_to_m2, s_bar);
-        // T_eji[repetition][party][j] =
-        // utils::interpolate_with_precomputation(
-        // precomputation_for_zero_to_m2, t_bar);
         s_prime[repetition][party][j] = s_bar;
         t_prime[repetition][party][j] = t_bar;
       }
@@ -629,10 +630,14 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       }
 
       // second m2+1 points: sample from random tape
+      auto random_P_shares = random_tapes.get_bytes(
+          repetition, party,
+          instance.aes_params.key_size + instance.aes_params.num_sboxes +
+              instance.m1 * 2 * instance.lambda,
+          (instance.m2 + 1) * instance.lambda);
       for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
-        random_tapes[repetition][party].squeeze_bytes(
-            lambda_sized_buffer.data(), lambda_sized_buffer.size());
-        P_shares[party][k].from_bytes(lambda_sized_buffer.data());
+        P_shares[party][k].from_bytes(random_P_shares.data() +
+                                      (k - instance.m2) * instance.lambda);
       }
     }
     for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
@@ -646,11 +651,6 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       // adjust first share
       P_shares[0][k] += P_at_k_delta;
     }
-    // for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-    //// iterpolate polynomial P_e^1 from 2m+1 points
-    // P_ei[repetition][party] = utils::interpolate_with_precomputation(
-    // precomputation_for_zero_to_2m2, P_shares[party]);
-    //}
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -700,11 +700,6 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       auto a_shares_party = a_shares.get(repetition, party);
       auto b_shares_party = b_shares.get(repetition, party);
       for (size_t j = 0; j < instance.m1; j++) {
-        // compute a_ej^i and b_ej^i
-        // a_shares[repetition][party][j] =
-        // eval(S_eji[repetition][party][j], R_es[repetition]);
-        // b_shares[repetition][party][j] =
-        // eval(T_eji[repetition][party][j], R_es[repetition]);
         a_shares_party[j] = dot_product(lagrange_polys_evaluated_at_Re_m2,
                                         s_prime[repetition][party][j]);
         b_shares_party[j] = dot_product(lagrange_polys_evaluated_at_Re_m2,
@@ -791,13 +786,16 @@ bool banquet_verify(const banquet_instance_t &instance,
   memcpy(pt.data(), pk.data(), pt.size());
   memcpy(ct.data(), pk.data() + pt.size(), ct.size());
 
-  // buffer for squeezing field elements into
-  std::vector<uint8_t> lambda_sized_buffer(instance.lambda);
-
   // do parallel repetitions
   // create seed trees and random tapes
   std::vector<SeedTree> seed_trees;
-  std::vector<std::vector<RandomTape>> random_tapes;
+  seed_trees.reserve(instance.num_rounds);
+
+  size_t random_tape_size =
+      instance.aes_params.key_size + instance.aes_params.num_sboxes +
+      2 * instance.m1 * instance.lambda + (instance.m2 + 1) * instance.lambda;
+  RandomTapes random_tapes(instance.num_rounds, instance.num_MPC_parties,
+                           random_tape_size);
   RepByteContainer party_seed_commitments(
       instance.num_rounds, instance.num_MPC_parties, instance.digest_size);
 
@@ -862,19 +860,23 @@ bool banquet_verify(const banquet_instance_t &instance,
     std::copy(std::begin(proof.C_e), std::end(proof.C_e), std::begin(com));
 
     // create random tape for each party, dummy one for missing party
-    std::vector<RandomTape> party_tapes;
-    party_tapes.reserve(instance.num_MPC_parties);
-    for (size_t party = 0; party < instance.num_MPC_parties; party++) {
-      if (party != missing_parties[repetition]) {
-        party_tapes.emplace_back(seed_trees[repetition].get_leaf(party).value(),
-                                 signature.salt, repetition, party);
-      } else {
-        std::vector<uint8_t> dummy(instance.seed_size);
-        party_tapes.emplace_back(gsl::span(dummy), signature.salt, repetition,
-                                 party);
+    {
+      size_t party = 0;
+      std::vector<uint8_t> dummy(instance.seed_size);
+      for (; party < (instance.num_MPC_parties / 4) * 4; party += 4) {
+        random_tapes.generate_4_tapes(
+            repetition, party, signature.salt,
+            seed_trees[repetition].get_leaf(party).value_or(dummy),
+            seed_trees[repetition].get_leaf(party + 1).value_or(dummy),
+            seed_trees[repetition].get_leaf(party + 2).value_or(dummy),
+            seed_trees[repetition].get_leaf(party + 3).value_or(dummy));
+      }
+      for (; party < instance.num_MPC_parties; party++) {
+        random_tapes.generate_tape(
+            repetition, party, signature.salt,
+            seed_trees[repetition].get_leaf(party).value_or(dummy));
       }
     }
-    random_tapes.push_back(party_tapes);
   }
   /////////////////////////////////////////////////////////////////////////////
   // recompute commitments to executions of AES
@@ -896,8 +898,10 @@ bool banquet_verify(const banquet_instance_t &instance,
     // generate sharing of secret key
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       auto shared_key = rep_shared_keys.get(repetition, party);
-      random_tapes[repetition][party].squeeze_bytes(shared_key.data(),
-                                                    shared_key.size());
+      auto random_key_share =
+          random_tapes.get_bytes(repetition, party, 0, shared_key.size());
+      std::copy(std::begin(random_key_share), std::end(random_key_share),
+                std::begin(shared_key));
     }
 
     // fix first share
@@ -909,8 +913,11 @@ bool banquet_verify(const banquet_instance_t &instance,
     // generate sharing of t values
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
       auto shared_t = rep_shared_t.get(repetition, party);
-      random_tapes[repetition][party].squeeze_bytes(shared_t.data(),
-                                                    shared_t.size());
+      auto random_t_shares = random_tapes.get_bytes(
+          repetition, party, instance.aes_params.key_size,
+          instance.aes_params.num_sboxes);
+      std::copy(std::begin(random_t_shares), std::end(random_t_shares),
+                std::begin(shared_t));
     }
     // fix first share
     auto first_shared_t = rep_shared_t.get(repetition, 0);
@@ -1013,21 +1020,15 @@ bool banquet_verify(const banquet_instance_t &instance,
           }
 
           // sample additional random points
-          random_tapes[repetition][party].squeeze_bytes(
-              lambda_sized_buffer.data(), lambda_sized_buffer.size());
-          s_bar[instance.m2].from_bytes(lambda_sized_buffer.data());
+          auto S_T_bar = random_tapes.get_bytes(
+              repetition, party,
+              instance.aes_params.key_size + instance.aes_params.num_sboxes +
+                  j * 2 * instance.lambda,
+              2 * instance.lambda);
 
-          random_tapes[repetition][party].squeeze_bytes(
-              lambda_sized_buffer.data(), lambda_sized_buffer.size());
-          t_bar[instance.m2].from_bytes(lambda_sized_buffer.data());
+          s_bar[instance.m2].from_bytes(S_T_bar.data());
+          t_bar[instance.m2].from_bytes(S_T_bar.data() + instance.lambda);
 
-          // interpolate polynomials S_ej^i and T_ej^i
-          // S_eji[repetition][party][j] =
-          // utils::interpolate_with_precomputation(
-          // precomputation_for_zero_to_m2, s_bar);
-          // T_eji[repetition][party][j] =
-          // utils::interpolate_with_precomputation(
-          // precomputation_for_zero_to_m2, t_bar);
           s_prime[repetition][party][j] = s_bar;
           t_prime[repetition][party][j] = t_bar;
         }
@@ -1056,10 +1057,14 @@ bool banquet_verify(const banquet_instance_t &instance,
         }
 
         // second m2+1 points: sample from random tape
+        auto random_P_shares = random_tapes.get_bytes(
+            repetition, party,
+            instance.aes_params.key_size + instance.aes_params.num_sboxes +
+                instance.m1 * 2 * instance.lambda,
+            (instance.m2 + 1) * instance.lambda);
         for (size_t k = instance.m2; k <= 2 * instance.m2; k++) {
-          random_tapes[repetition][party].squeeze_bytes(
-              lambda_sized_buffer.data(), lambda_sized_buffer.size());
-          P_shares[party][k].from_bytes(lambda_sized_buffer.data());
+          P_shares[party][k].from_bytes(random_P_shares.data() +
+                                        (k - instance.m2) * instance.lambda);
         }
       }
     }
@@ -1115,18 +1120,12 @@ bool banquet_verify(const banquet_instance_t &instance,
         auto b_shares_party = b_shares.get(repetition, party);
         for (size_t j = 0; j < instance.m1; j++) {
           // compute a_ej^i and b_ej^i
-          //  a_shares[repetition][party][j] =
-          //  eval(S_eji[repetition][party][j], R_es[repetition]);
-          //  b_shares[repetition][party][j] =
-          //  eval(T_eji[repetition][party][j], R_es[repetition]);
           a_shares_party[j] = dot_product(lagrange_polys_evaluated_at_Re_m2,
                                           s_prime[repetition][party][j]);
           b_shares_party[j] = dot_product(lagrange_polys_evaluated_at_Re_m2,
                                           t_prime[repetition][party][j]);
         }
         // compute c_e^i
-        // c_shares[repetition][party] =
-        // eval(P_ei[repetition][party], R_es[repetition]);
         c_shares[repetition][party] = dot_product(
             lagrange_polys_evaluated_at_Re_2m2, P_e_shares[repetition][party]);
       }
