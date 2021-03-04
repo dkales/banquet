@@ -1,12 +1,3 @@
-/*
- *  This file is part of the optimized implementation of the BANQUET signature
- * scheme. See the accompanying documentation for complete details.
- *
- *  The code is provided under the MIT license, see LICENSE for
- *  more details.
- *  SPDX-License-Identifier: MIT
- */
-
 #ifndef BANQUET_INSTANCES_H
 #define BANQUET_INSTANCES_H
 

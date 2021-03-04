@@ -1,10 +1,29 @@
 /*
- *  This file is part of the optimized implementation of the Picnic signature scheme.
+ *  This file is part of the optimized implementation of the Picnic signature
+ *  scheme.
  *  See the accompanying documentation for complete details.
+ *  The code is provided under the MIT license:
  *
- *  The code is provided under the MIT license, see LICENSE for
- *  more details.
- *  SPDX-License-Identifier: MIT
+ * Copyright (c) 2019-2020 Sebastian Ramacher, AIT
+ * Copyright (c) 2016-2020 Graz University of Technology
+ * Copyright (c) 2017 Angela Promitzer
+
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the ""Software""), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 #ifndef PICNIC_MACROS_H
@@ -29,8 +48,9 @@
 
 /* gcc version check macro */
 #if defined(__GNUC__) && defined(__GNUC_MINOR__)
-#define GNUC_CHECK(maj, min)                                                                       \
-  (((__GNUC__ << 20) + (__GNUC_MINOR__ << 10)) >= (((maj) << 20) + ((min) << 10)))
+#define GNUC_CHECK(maj, min)                                                   \
+  (((__GNUC__ << 20) + (__GNUC_MINOR__ << 10)) >=                              \
+   (((maj) << 20) + ((min) << 10)))
 #else
 #define GNUC_CHECK(maj, min) 0
 #endif
@@ -52,7 +72,8 @@
 /* NetBSD version check macro */
 #if defined(__NetBSD__)
 #include <sys/param.h>
-#define NETBSD_CHECK(maj, min) (__NetBSD_Version__ >= ((maj)*1000000000 + (min)*10000000))
+#define NETBSD_CHECK(maj, min)                                                 \
+  (__NetBSD_Version__ >= ((maj)*1000000000 + (min)*10000000))
 #else
 #define NETBSD_CHECK(maj, min) 0
 #endif
@@ -60,7 +81,7 @@
 /* Apple version check macro */
 #if defined(__APPLE__)
 #include <Availability.h>
-#define MACOSX_CHECK(maj, min, rev)                                                                \
+#define MACOSX_CHECK(maj, min, rev)                                            \
   (__MAC_OS_X_VERSION_MIN_REQUIRED >= ((maj)*10000 + (min)*100 + (rev)))
 #else
 #define MACOSX_CHECK(maj, min, rev) 0
@@ -76,8 +97,8 @@
 
 /* assume */
 #if GNUC_CHECK(4, 5) || __has_builtin(__builtin_unreachable)
-#define ASSUME(p)                                                                                  \
-  if (!(p))                                                                                        \
+#define ASSUME(p)                                                              \
+  if (!(p))                                                                    \
   __builtin_unreachable()
 #elif defined(_MSC_VER)
 #define ASSUME(p) __assume(p)
@@ -135,7 +156,8 @@
 #if GNUC_CHECK(4, 9) || __has_builtin(__builtin_assume_aligned)
 #define ASSUME_ALIGNED(p, a) __builtin_assume_aligned((p), (a))
 #elif defined(UNREACHABLE) && defined(HAVE_USEFUL_ATTR_ALIGNED)
-#define ASSUME_ALIGNED(p, a) (((((uintptr_t)(p)) % (a)) == 0) ? (p) : (UNREACHABLE, (p)))
+#define ASSUME_ALIGNED(p, a)                                                   \
+  (((((uintptr_t)(p)) % (a)) == 0) ? (p) : (UNREACHABLE, (p)))
 #else
 #define ASSUME_ALIGNED(p, a) (p)
 #endif
@@ -204,7 +226,8 @@
 #include <stddef.h>
 
 ATTR_ARTIFICIAL
-static inline bool sub_overflow_size_t(const size_t x, const size_t y, size_t* diff) {
+static inline bool sub_overflow_size_t(const size_t x, const size_t y,
+                                       size_t *diff) {
   *diff = x - y;
   return x < y;
 }
@@ -227,8 +250,11 @@ ATTR_CONST ATTR_ARTIFICIAL static inline uint64_t parity64_uint64(uint64_t in) {
 }
 #else
 ATTR_CONST ATTR_ARTIFICIAL static inline uint8_t parity64_uint8(uint8_t in) {
-  /* byte parity from: https://graphics.stanford.edu/~seander/bithacks.html#ParityWith64Bits */
-  return (((in * UINT64_C(0x0101010101010101)) & UINT64_C(0x8040201008040201)) % 0x1FF) & 1;
+  /* byte parity from:
+   * https://graphics.stanford.edu/~seander/bithacks.html#ParityWith64Bits */
+  return (((in * UINT64_C(0x0101010101010101)) & UINT64_C(0x8040201008040201)) %
+          0x1FF) &
+         1;
 }
 
 ATTR_CONST ATTR_ARTIFICIAL static inline uint16_t parity64_uint16(uint16_t in) {
