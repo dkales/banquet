@@ -522,7 +522,9 @@ void aes_128_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
                       std::vector<gsl::span<uint8_t>> &ciphertext_out,
                       std::vector<gsl::span<uint8_t>> &s_shares) {
 
+#pragma GCC diagnostic ignored "-Wignored-attributes"
   typedef std::array<__m128i, 11> expanded_key_t;
+#pragma GCC diagnostic pop
   int num_parties = key_in.size();
   std::vector<expanded_key_t> key_schedule(num_parties);
   __m128i state;
@@ -865,7 +867,9 @@ void aes_192_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
                       std::vector<gsl::span<uint8_t>> &ciphertext_out,
                       std::vector<gsl::span<uint8_t>> &s_shares) {
 
+#pragma GCC diagnostic ignored "-Wignored-attributes"
   typedef std::array<__m128i, 13> expanded_key_t;
+#pragma GCC diagnostic pop
   int num_parties = key_in.size();
   std::vector<expanded_key_t> key_schedule(num_parties);
   __m128i state;
@@ -1281,7 +1285,9 @@ void aes_256_s_shares(const std::vector<gsl::span<uint8_t>> &key_in,
                       std::vector<gsl::span<uint8_t>> &ciphertext_out,
                       std::vector<gsl::span<uint8_t>> &s_shares) {
 
+#pragma GCC diagnostic ignored "-Wignored-attributes"
   typedef std::array<__m128i, 15> expanded_key_t;
+#pragma GCC diagnostic pop
   int num_parties = key_in.size();
   std::vector<expanded_key_t> key_schedule(num_parties);
   __m128i state;
