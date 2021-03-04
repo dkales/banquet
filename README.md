@@ -1,8 +1,8 @@
 # Banquet: Short and Fast Signatures from AES 
-This an implementation of the Banquet signature scheme presented in the following work ([eprint](https://eprint.iacr.org/2021/068)).
+This an implementation of the Banquet signature scheme presented in the following work ([eprint](https://eprint.iacr.org/2021/068)):
 
 **Banquet: Short and Fast Signatures from AES**
-*Carsten Baum, Cyprien Delpech de Saint Guilhem, Daniel Kales, Emmanuela Orsini, Peter Scholl and Greg Zaverucha*
+*Carsten Baum, Cyprien Delpech de Saint Guilhem, Daniel Kales, Emmanuela Orsini, Peter Scholl and Greg Zaverucha*,
 Public Key Cryptography 2021
 
 
@@ -33,3 +33,7 @@ make test
 ./bench -i <iterations> <instance> #instance from banquet_instances.h
 ./bench_free -i <iterations> <kappa> <N> <tau> <m1> <m2> <lambda> #benchmark parameters freely, see paper for secure parameters
 ```
+
+## Acknowledgements
+
+Some parts of the code were based on the [optimized Picnic implementation](https://github.com/IAIK/Picnic).
