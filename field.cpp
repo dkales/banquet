@@ -1,7 +1,12 @@
 #include "field.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <complex>
 #include <cstring>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <vector>
@@ -167,17 +172,26 @@ bool GF2E::operator!=(const GF2E &other) const {
   return this->data != other.data;
 }
 
+std::ostream &operator<<(std::ostream &os, const GF2E &ele) {
+  os << "0x" << std::setfill('0') << std::hex << std::setw(16)
+     << ele.get_data();
+  return os;
+}
+
 GF2E GF2E::inverse() const { return GF2E(mod_inverse(this->data, modulus)); }
 
 void GF2E::to_bytes(uint8_t *out) const {
   uint64_t be_data = htole64(data);
   memcpy(out, (uint8_t *)(&be_data), byte_size);
 }
+
 std::vector<uint8_t> GF2E::to_bytes() const {
   std::vector<uint8_t> buffer(byte_size);
   this->to_bytes(buffer.data());
   return buffer;
 }
+
+uint64_t GF2E::get_data() const { return this->data; }
 
 void GF2E::from_bytes(uint8_t *in) {
   data = 0;
@@ -313,18 +327,128 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
 
 const GF2E &lift_uint8_t(uint8_t value) { return lifting_lut[value]; }
 
-std::vector<GF2E> get_first_n_field_elements(size_t n) {
-  std::vector<GF2E> result;
-  result.reserve(n);
-  GF2E x(2);
-  GF2E gen = x;
-  for (size_t i = 0; i < n; i++) {
-    result.push_back(gen);
-    gen = gen * x;
+// Reads the precomputed denominator from file
+void read_precomputed_denominator_from_file(
+    std::vector<GF2E> &precomputed_denominator, size_t x_len) {
+  precomputed_denominator.reserve(x_len);
+  std::ifstream file;
+  file.open("precomputed_denominator_out.txt");
+  if (file.is_open()) {
+    std::string line;
+    while (std::getline(file, line)) {
+      precomputed_denominator.push_back(GF2E(line));
+    }
+  } else {
+    throw std::runtime_error(
+        "Cannot open file to read precomputed denominator data");
   }
-  return result;
+  file.close();
 }
 
+// Read the precomputed x - xi
+void read_precomputed_x_minus_xi_poly_splits_to_file(
+    std::vector<std::vector<GF2E>> &precomputed_x_minus_xi,
+    const size_t root_count, std::ifstream &file) {
+
+  size_t line_count = 0;
+  for (size_t i = root_count; i > 1; i /= 2) {
+    line_count += i;
+  }
+  precomputed_x_minus_xi.reserve(line_count);
+
+  if (file.is_open()) {
+    std::string line;
+    while (std::getline(file, line)) {
+      // Parsing line by line and pushing to the vector
+      int elem_count = std::count(line.begin(), line.end(), ',');
+      std::vector<GF2E> gf_elem;
+      gf_elem.reserve(elem_count);
+      size_t start_search_index = 0;
+      for (size_t i = 0; i < (size_t)elem_count; ++i) {
+        // Spiting with ","
+        size_t found_index = line.find(',', start_search_index);
+        size_t s = found_index - start_search_index;
+        gf_elem.push_back(GF2E(line.substr(start_search_index, s)));
+        start_search_index = found_index + 1;
+      }
+      precomputed_x_minus_xi.push_back(gf_elem);
+    }
+  } else {
+    throw std::runtime_error(
+        "Cannot open file to read precomputed x - xi data");
+  }
+  file.close();
+}
+
+// Use to precompute the constants of the denominaotr.inverse()
+void write_precomputed_denominator_to_file(const std::vector<GF2E> &x_values) {
+  // Check if value size is power of 2
+  if (ceil(log2(x_values.size())) != floor(log2(x_values.size()))) {
+    throw std::runtime_error("invalid sizes for interpolation");
+  }
+  std::ofstream file;
+  file.open("precomputed_denominator_out.txt");
+
+  size_t values_size = x_values.size();
+  GF2E denominator;
+  for (size_t k = 0; k < values_size; ++k) {
+
+    denominator = GF2E(1);
+    for (size_t i = 0; i < values_size; ++i) {
+      if (i != k) {
+        denominator *= x_values[k] - x_values[i];
+      }
+    }
+    file << denominator.inverse() << std::endl;
+  }
+}
+
+// Use to precompute x - xi recurssively
+void write_precomputed_x_minus_xi_poly_splits_to_file(
+    const std::vector<GF2E> &x_values, std::ofstream &file) {
+  size_t len = x_values.size();
+  if (len == 1) {
+    return;
+  }
+  size_t len_half = len / 2;
+
+  // Gets the first half roots
+  std::vector<GF2E> x_first_half_roots;
+  x_first_half_roots.reserve(len / 2);
+  for (size_t i = 0; i < len_half; ++i) {
+    x_first_half_roots.push_back(x_values[i]);
+  }
+  // Generates poly from roots
+  std::vector<GF2E> x_first_half_poly = build_from_roots(x_first_half_roots);
+  // Writes poly to file
+  size_t len_first_poly = x_first_half_poly.size();
+  for (size_t i = 0; i < len_first_poly; ++i) {
+    file << x_first_half_poly[i] << ",";
+  }
+  file << std::endl;
+  // Recurssion with the first half roots
+  write_precomputed_x_minus_xi_poly_splits_to_file(x_first_half_roots, file);
+
+  // Gets the second half roots
+  std::vector<GF2E> x_second_half_roots;
+  x_second_half_roots.reserve(len / 2);
+  for (size_t i = len_half; i < len; ++i) {
+    x_second_half_roots.push_back(x_values[i]);
+  }
+  // Generates poly from roots
+  std::vector<GF2E> x_second_half_poly = build_from_roots(x_second_half_roots);
+  // Write poly to file
+  size_t len_second_poly = x_second_half_poly.size();
+  for (size_t i = 0; i < len_second_poly; i++) {
+    file << x_second_half_poly[i] << ",";
+  }
+  file << std::endl;
+  // Recurssion with the second half roots
+  write_precomputed_x_minus_xi_poly_splits_to_file(x_second_half_roots, file);
+}
+
+// Computing the precomputable part of the plain langrange interpolation
+// (not-optimized)
 std::vector<std::vector<GF2E>>
 precompute_lagrange_polynomials(const std::vector<GF2E> &x_values) {
   size_t m = x_values.size();
@@ -352,6 +476,27 @@ precompute_lagrange_polynomials(const std::vector<GF2E> &x_values) {
   return precomputed_lagrange_polynomials;
 }
 
+// Computing the precomputable part of the plain langrange interpolation
+// (optimized)
+std::vector<std::vector<GF2E>>
+precompute_lagrange_polynomials(const std::vector<GF2E> &x_values,
+                                const std::vector<GF2E> x_minus_xi) {
+  size_t m = x_values.size();
+  std::vector<std::vector<GF2E>> precomputed_lagrange_polynomials;
+  precomputed_lagrange_polynomials.reserve(m);
+
+  for (size_t k = 0; k < m; k++) {
+
+    std::vector<GF2E> numerator = x_minus_xi / x_values[k];
+
+    numerator = eval(numerator, x_values[k]).inverse() * numerator;
+    precomputed_lagrange_polynomials.push_back(numerator);
+  }
+
+  return precomputed_lagrange_polynomials;
+}
+
+// Langrange interpolation with precomputation (slow)
 std::vector<GF2E> interpolate_with_precomputation(
     const std::vector<std::vector<GF2E>> &precomputed_lagrange_polynomials,
     const std::vector<GF2E> &y_values) {
@@ -365,6 +510,71 @@ std::vector<GF2E> interpolate_with_precomputation(
     res += precomputed_lagrange_polynomials[k] * y_values[k];
   }
   return res;
+}
+
+// Langrange interpolation with precomputation (fast)
+std::vector<GF2E> interpolate_with_precomputation(
+    const std::vector<GF2E> &precomputed_denominator,
+    const std::vector<GF2E> &y_values, const size_t index) {
+
+  std::vector<GF2E> a_precomputed_denominator;
+  a_precomputed_denominator.reserve(1);
+  a_precomputed_denominator.push_back(precomputed_denominator[index]);
+
+  return y_values[index] * a_precomputed_denominator;
+}
+
+// Langrange interpolation using recurssion (fast)
+std::vector<GF2E> interpolate_with_recurrsion(
+    const std::vector<GF2E> &y_values,
+    const std::vector<GF2E> &precomputed_denominator,
+    const std::vector<std::vector<GF2E>> &precomputed_x_minus_xi,
+    const size_t x_start_index, const size_t x_length,
+    const size_t x_minus_xi_first_index, const size_t x_minus_xi_length) {
+
+  // For indexing x_values
+  const size_t x_len_half = x_length / 2;
+  const size_t x_end_index = x_start_index + x_length - 1;
+  const size_t x_second_half_start_index = x_start_index + x_len_half;
+
+  // For indexing x_minus_xi values
+  const size_t x_minus_xi_half_length = x_minus_xi_length / 2;
+  const size_t x_minus_xi_second_index =
+      x_minus_xi_half_length + x_minus_xi_first_index;
+
+  // The recurssion part !!
+  if (x_length != 2) {
+
+    return (precomputed_x_minus_xi[x_minus_xi_second_index] *
+            interpolate_with_recurrsion(y_values, precomputed_denominator,
+                                        precomputed_x_minus_xi, x_start_index,
+                                        x_len_half, x_minus_xi_first_index + 1,
+                                        x_minus_xi_half_length - 1)) +
+           (precomputed_x_minus_xi[x_minus_xi_first_index] *
+            interpolate_with_recurrsion(
+                y_values, precomputed_denominator, precomputed_x_minus_xi,
+                x_second_half_start_index, x_len_half,
+                x_minus_xi_second_index + 1, x_minus_xi_half_length - 1));
+  }
+
+  return (precomputed_x_minus_xi[x_minus_xi_second_index] *
+          interpolate_with_precomputation(precomputed_denominator, y_values,
+                                          x_start_index)) +
+         (precomputed_x_minus_xi[x_minus_xi_first_index] *
+          interpolate_with_precomputation(precomputed_denominator, y_values,
+                                          x_end_index));
+}
+
+std::vector<GF2E> get_first_n_field_elements(size_t n) {
+  std::vector<GF2E> result;
+  result.reserve(n);
+  GF2E x(2);
+  GF2E gen = x;
+  for (size_t i = 0; i < n; i++) {
+    result.push_back(gen);
+    gen = gen * x;
+  }
+  return result;
 }
 
 std::vector<GF2E> build_from_roots(const std::vector<GF2E> &roots) {
@@ -385,6 +595,7 @@ std::vector<GF2E> build_from_roots(const std::vector<GF2E> &roots) {
   poly[len] = GF2E(1);
   return poly;
 }
+
 // horner eval
 GF2E eval(const std::vector<GF2E> &poly, const GF2E &point) {
   GF2E acc;
@@ -464,5 +675,22 @@ std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
     for (size_t j = 0; j < rhs.size(); j++)
       result[i + j] += lhs[i] * rhs[j];
 
+  return result;
+}
+
+// polynomial division of x^n*c^n + x^n-1*c^n-1 + .... by x - a
+std::vector<field::GF2E> operator/(const std::vector<field::GF2E> &lhs,
+                                   const field::GF2E &rhs) {
+  std::vector<field::GF2E> temp(lhs);
+  size_t end_index = temp.size() - 1;
+  std::vector<field::GF2E> result;
+  result.reserve(end_index);
+  for (size_t i = end_index; i > 0; --i) {
+    field::GF2E t = temp[i] * rhs;
+    temp[i - 1] -= t;
+  }
+  for (size_t i = 1; i <= end_index; i++) {
+    result.push_back(temp[i]);
+  }
   return result;
 }
