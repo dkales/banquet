@@ -173,12 +173,37 @@ bool GF2E::operator!=(const GF2E &other) const {
 }
 
 std::ostream &operator<<(std::ostream &os, const GF2E &ele) {
-  os << "0x" << std::setfill('0') << std::hex << std::setw(16)
-     << ele.get_data();
+  os << "0x" << std::setfill('0') << std::hex << std::setw(8) << ele.get_data();
   return os;
 }
 
 GF2E GF2E::inverse() const { return GF2E(mod_inverse(this->data, modulus)); }
+
+// WARNING - Work In Progress !!
+/* GF2E GF2E::inverse_fast() const {
+  constexpr uint64_t u[8] = {1, 2, 3, 5, 7, 14, 28, 31};
+  constexpr uint64_t u_len = sizeof(u) / sizeof(u[0]);
+  // q = u[i] - u[i - 1] should give us the corresponding values
+  // (1, 1, 2, 2, 7, 14, 3), which will have corresponding indexes
+  constexpr uint64_t q_index[u_len - 1] = {0, 0, 1, 1, 4, 5, 2};
+  uint64_t b[u_len];
+
+  b[0] = (uint64_t)this->data;
+
+  for (size_t i = 1; i < u_len; ++i) {
+
+    uint64_t b_p = b[i - 1];
+    uint64_t b_q = b[q_index[i - 1]];
+
+    for (uint64_t m = u[q_index[i - 1]]; m; --m) {
+      b_p *= b_p;
+    }
+
+    b[i] = b_p * b_q;
+  }
+
+  return GF2E(b[u_len - 1] * b[u_len - 1]);
+} */
 
 void GF2E::to_bytes(uint8_t *out) const {
   uint64_t be_data = htole64(data);

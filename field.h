@@ -50,6 +50,8 @@ public:
 
   GF2E inverse() const;
 
+  GF2E inverse_fast() const;
+
   void to_bytes(uint8_t *out) const;
   std::vector<uint8_t> to_bytes() const;
   void from_bytes(uint8_t *in);
