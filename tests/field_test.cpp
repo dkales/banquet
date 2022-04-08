@@ -207,37 +207,30 @@ TEST_CASE("NTL to custom conversion", "[field]") {
     REQUIRE(b == b2);
   }
 }
-TEST_CASE("NTL inverse == custom", "[field]") {
-  banquet_params_t params[] = {Banquet_L1_Param1, Banquet_L1_Param3,
-                               Banquet_L1_Param4};
-  for (auto param : params) {
-    utils::init_extension_field(banquet_instance_get(param));
-    field::GF2E::init_extension_field(banquet_instance_get(param));
-    field::GF2E a;
-    a.set_coeff(31);
-    a.set_coeff(29);
-    a.set_coeff(28);
-    a.set_coeff(24);
-    a.set_coeff(23);
-    a.set_coeff(21);
-    a.set_coeff(19);
-    a.set_coeff(15);
-    a.set_coeff(14);
-    a.set_coeff(9);
-    a.set_coeff(8);
-    a.set_coeff(0);
 
-    field::GF2E b = a.inverse();
-    field::GF2E c = utils::ntl_to_custom(inv(utils::custom_to_ntl(a)));
-    // std::cout << utils::custom_to_ntl(a) << ", " << utils::custom_to_ntl(b)
-    //           << ", " << utils::custom_to_ntl(c) << "\n";
-    // std::cout << utils::custom_to_ntl(a * b) << ", "
-    //           << utils::custom_to_ntl(a * c) << ", "
-    //           << utils::custom_to_ntl(a) * utils::custom_to_ntl(c) << "\n";
-    REQUIRE(b == c);
-    REQUIRE(a * b == field::GF2E(1));
-  }
+TEST_CASE("NTL inverse == custom", "[field]") {
+  utils::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
+  field::GF2E a;
+  a.set_coeff(31);
+  a.set_coeff(29);
+  a.set_coeff(28);
+  a.set_coeff(24);
+  a.set_coeff(23);
+  a.set_coeff(21);
+  a.set_coeff(19);
+  a.set_coeff(15);
+  a.set_coeff(14);
+  a.set_coeff(9);
+  a.set_coeff(8);
+  a.set_coeff(0);
+
+  field::GF2E b = a.inverse();
+  field::GF2E c = utils::ntl_to_custom(inv(utils::custom_to_ntl(a)));
+  REQUIRE(b == c);
+  REQUIRE(a * b == field::GF2E(1));
 }
+
 TEST_CASE("NTL interpolation == custom", "[field]") {
   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
   utils::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
@@ -268,18 +261,15 @@ TEST_CASE("NTL interpolation == custom", "[field]") {
 }
 
 TEST_CASE("optmized custom == custom interpolation", "[field]") {
-
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
   const size_t ROOT_SIZE = 128;
 
   std::vector<field::GF2E> x = field::get_first_n_field_elements(ROOT_SIZE);
   std::vector<field::GF2E> y = field::get_first_n_field_elements(ROOT_SIZE);
-
   std::vector<std::vector<field::GF2E>> a_lag =
       field::precompute_lagrange_polynomials(x);
-
   std::vector<field::GF2E> result =
       field::interpolate_with_precomputation(a_lag, y);
-
   std::vector<field::GF2E> x_opti =
       field::get_first_n_field_elements(ROOT_SIZE);
   std::vector<field::GF2E> y_opti =
@@ -287,10 +277,8 @@ TEST_CASE("optmized custom == custom interpolation", "[field]") {
 
   std::vector<field::GF2E> x_minus_xi_poly_opti =
       field::build_from_roots(x_opti);
-
   std::vector<std::vector<field::GF2E>> x_lag =
       field::precompute_lagrange_polynomials(x_opti, x_minus_xi_poly_opti);
-
   std::vector<field::GF2E> result_optim =
       field::interpolate_with_precomputation(x_lag, y_opti);
 
@@ -298,76 +286,33 @@ TEST_CASE("optmized custom == custom interpolation", "[field]") {
 }
 
 TEST_CASE("fast interpolation == optmized custom interpolation", "[field]") {
-
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
   const size_t ROOT_SIZE = 1024;
 
-  // auto start_preprocessing_slow = std::chrono::system_clock::now();
   std::vector<field::GF2E> x_opti =
       field::get_first_n_field_elements(ROOT_SIZE);
   std::vector<field::GF2E> y_opti =
       field::get_first_n_field_elements(ROOT_SIZE);
-
   std::vector<field::GF2E> x_minus_xi_poly_opti =
       field::build_from_roots(x_opti);
-
   std::vector<std::vector<field::GF2E>> x_lag =
       field::precompute_lagrange_polynomials(x_opti, x_minus_xi_poly_opti);
-
-  // auto end_preprocessing_slow =
-  //     std::chrono::system_clock::now() - start_preprocessing_slow;
-  // std::cout << "Optmized Slow Time to precomp - "
-  //           << end_preprocessing_slow / std::chrono::milliseconds(1) << "ms"
-  //           << std::endl;
-
-  // auto start_interpolation_slow = std::chrono::system_clock::now();
-
   std::vector<field::GF2E> result_optim =
       field::interpolate_with_precomputation(x_lag, y_opti);
 
-  // auto end_interpolation_slow =
-  //     std::chrono::system_clock::now() - start_interpolation_slow;
-  // std::cout << "Optmized Slow Time to interpolate - "
-  //           << end_interpolation_slow / std::chrono::milliseconds(1) << "ms"
-  //           << std::endl;
-
-  // auto start_preprocessing = std::chrono::system_clock::now();
   std::vector<field::GF2E> x_fast =
       field::get_first_n_field_elements(ROOT_SIZE);
   std::vector<field::GF2E> y_fast =
       field::get_first_n_field_elements(ROOT_SIZE);
-
-  // Precompute and write to file
-  field::write_precomputed_denominator_to_file(x_fast);
-  std::ofstream file_out;
-  file_out.open("precomputed_x_minus_xi_out.txt");
-  field::write_precomputed_x_minus_xi_poly_splits_to_file(x_fast, file_out);
-  // Reading the precomputed part
-  std::vector<field::GF2E> precomputed_denominator;
-  field::read_precomputed_denominator_from_file(precomputed_denominator,
-                                                x_fast.size());
-  std::ifstream file_in;
-  file_in.open("precomputed_x_minus_xi_out.txt");
-  std::vector<std::vector<field::GF2E>> precomputed_x_minus_xi_poly_splits;
-  field::read_precomputed_x_minus_xi_poly_splits_to_file(
-      precomputed_x_minus_xi_poly_splits, x_fast.size(), file_in);
-
-  // auto end_preprocessing =
-  //     std::chrono::system_clock::now() - start_preprocessing;
-  // std::cout << "Fast Time to precomp - "
-  //           << end_preprocessing / std::chrono::milliseconds(1) << "ms"
-  //           << std::endl;
-
-  // auto start_interpolation = std::chrono::system_clock::now();
+  std::vector<field::GF2E> precomputed_denominator =
+      field::precompute_denominator(x_fast);
+  std::vector<std::vector<field::GF2E>> precomputed_x_minus_xi;
+  field::set_x_minus_xi_poly_size(precomputed_x_minus_xi, x_fast.size());
+  field::precompute_x_minus_xi_poly_splits(x_fast, precomputed_x_minus_xi);
 
   std::vector<field::GF2E> result_fast = field::interpolate_with_recurrsion(
-      y_fast, precomputed_denominator, precomputed_x_minus_xi_poly_splits, 0,
-      x_fast.size(), 0, precomputed_x_minus_xi_poly_splits.size());
-
-  // auto end_interpolation =
-  //     std::chrono::system_clock::now() - start_interpolation;
-  // std::cout << "Fast Time to interpolate - "
-  //           << end_interpolation / std::chrono::milliseconds(1) << "ms"
-  //           << std::endl;
+      y_fast, precomputed_denominator, precomputed_x_minus_xi, 0, x_fast.size(),
+      0, precomputed_x_minus_xi.size());
 
   REQUIRE(result_fast == result_optim);
 }

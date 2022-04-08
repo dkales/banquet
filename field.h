@@ -50,8 +50,6 @@ public:
 
   GF2E inverse() const;
 
-  GF2E inverse_fast() const;
-
   void to_bytes(uint8_t *out) const;
   std::vector<uint8_t> to_bytes() const;
   void from_bytes(uint8_t *in);
@@ -84,17 +82,14 @@ std::ostream &operator<<(std::ostream &os, const GF2E &ele);
 
 const GF2E &lift_uint8_t(uint8_t value);
 
-void read_precomputed_denominator_from_file(
-    std::vector<GF2E> &precomputed_denominator, size_t x_len);
+std::vector<GF2E> precompute_denominator(const std::vector<GF2E> &x_values);
 
-void read_precomputed_x_minus_xi_poly_splits_to_file(
-    std::vector<std::vector<GF2E>> &precomputed_x_minus_xi,
-    const size_t root_count, std::ifstream &file);
+void set_x_minus_xi_poly_size(
+    std::vector<std::vector<GF2E>> &precomputed_x_minus_xi, size_t root_count);
 
-void write_precomputed_denominator_to_file(const std::vector<GF2E> &x_values);
-
-void write_precomputed_x_minus_xi_poly_splits_to_file(
-    const std::vector<GF2E> &x_values, std::ofstream &file);
+void precompute_x_minus_xi_poly_splits(
+    const std::vector<GF2E> &x_values,
+    std::vector<std::vector<GF2E>> &precomputed_x_minus_xi);
 
 std::vector<std::vector<GF2E>>
 precompute_lagrange_polynomials(const std::vector<GF2E> &x_values);

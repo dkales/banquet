@@ -179,32 +179,6 @@ std::ostream &operator<<(std::ostream &os, const GF2E &ele) {
 
 GF2E GF2E::inverse() const { return GF2E(mod_inverse(this->data, modulus)); }
 
-// WARNING - Work In Progress !!
-/* GF2E GF2E::inverse_fast() const {
-  constexpr uint64_t u[8] = {1, 2, 3, 5, 7, 14, 28, 31};
-  constexpr uint64_t u_len = sizeof(u) / sizeof(u[0]);
-  // q = u[i] - u[i - 1] should give us the corresponding values
-  // (1, 1, 2, 2, 7, 14, 3), which will have corresponding indexes
-  constexpr uint64_t q_index[u_len - 1] = {0, 0, 1, 1, 4, 5, 2};
-  uint64_t b[u_len];
-
-  b[0] = (uint64_t)this->data;
-
-  for (size_t i = 1; i < u_len; ++i) {
-
-    uint64_t b_p = b[i - 1];
-    uint64_t b_q = b[q_index[i - 1]];
-
-    for (uint64_t m = u[q_index[i - 1]]; m; --m) {
-      b_p *= b_p;
-    }
-
-    b[i] = b_p * b_q;
-  }
-
-  return GF2E(b[u_len - 1] * b[u_len - 1]);
-} */
-
 void GF2E::to_bytes(uint8_t *out) const {
   uint64_t be_data = htole64(data);
   memcpy(out, (uint8_t *)(&be_data), byte_size);
@@ -352,85 +326,44 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
 
 const GF2E &lift_uint8_t(uint8_t value) { return lifting_lut[value]; }
 
-// Reads the precomputed denominator from file
-void read_precomputed_denominator_from_file(
-    std::vector<GF2E> &precomputed_denominator, size_t x_len) {
-  precomputed_denominator.reserve(x_len);
-  std::ifstream file;
-  file.open("precomputed_denominator_out.txt");
-  if (file.is_open()) {
-    std::string line;
-    while (std::getline(file, line)) {
-      precomputed_denominator.push_back(GF2E(line));
-    }
-  } else {
-    throw std::runtime_error(
-        "Cannot open file to read precomputed denominator data");
-  }
-  file.close();
-}
-
-// Read the precomputed x - xi
-void read_precomputed_x_minus_xi_poly_splits_to_file(
-    std::vector<std::vector<GF2E>> &precomputed_x_minus_xi,
-    const size_t root_count, std::ifstream &file) {
-
-  size_t line_count = 0;
-  for (size_t i = root_count; i > 1; i /= 2) {
-    line_count += i;
-  }
-  precomputed_x_minus_xi.reserve(line_count);
-
-  if (file.is_open()) {
-    std::string line;
-    while (std::getline(file, line)) {
-      // Parsing line by line and pushing to the vector
-      int elem_count = std::count(line.begin(), line.end(), ',');
-      std::vector<GF2E> gf_elem;
-      gf_elem.reserve(elem_count);
-      size_t start_search_index = 0;
-      for (size_t i = 0; i < (size_t)elem_count; ++i) {
-        // Spiting with ","
-        size_t found_index = line.find(',', start_search_index);
-        size_t s = found_index - start_search_index;
-        gf_elem.push_back(GF2E(line.substr(start_search_index, s)));
-        start_search_index = found_index + 1;
-      }
-      precomputed_x_minus_xi.push_back(gf_elem);
-    }
-  } else {
-    throw std::runtime_error(
-        "Cannot open file to read precomputed x - xi data");
-  }
-  file.close();
-}
-
 // Use to precompute the constants of the denominaotr.inverse()
-void write_precomputed_denominator_to_file(const std::vector<GF2E> &x_values) {
+std::vector<GF2E> precompute_denominator(const std::vector<GF2E> &x_values) {
   // Check if value size is power of 2
   if (ceil(log2(x_values.size())) != floor(log2(x_values.size()))) {
     throw std::runtime_error("invalid sizes for interpolation");
   }
-  std::ofstream file;
-  file.open("precomputed_denominator_out.txt");
-
   size_t values_size = x_values.size();
+  std::vector<GF2E> precomputed_denominator;
+  precomputed_denominator.reserve(values_size);
   GF2E denominator;
-  for (size_t k = 0; k < values_size; ++k) {
 
+  for (size_t k = 0; k < values_size; ++k) {
     denominator = GF2E(1);
     for (size_t i = 0; i < values_size; ++i) {
       if (i != k) {
         denominator *= x_values[k] - x_values[i];
       }
     }
-    file << denominator.inverse() << std::endl;
+    precomputed_denominator.push_back(denominator.inverse());
   }
+
+  return precomputed_denominator;
+}
+
+void set_x_minus_xi_poly_size(
+    std::vector<std::vector<GF2E>> &precomputed_x_minus_xi, size_t root_count) {
+  size_t split_count = 0;
+  for (size_t i = root_count; i > 1; i /= 2) {
+    split_count += i;
+  }
+  precomputed_x_minus_xi.reserve(split_count);
 }
 
 // Use to precompute x - xi recurssively
-void write_precomputed_x_minus_xi_poly_splits_to_file(
-    const std::vector<GF2E> &x_values, std::ofstream &file) {
+void precompute_x_minus_xi_poly_splits(
+    const std::vector<GF2E> &x_values,
+    std::vector<std::vector<GF2E>> &precomputed_x_minus_xi) {
+
   size_t len = x_values.size();
   if (len == 1) {
     return;
@@ -445,14 +378,10 @@ void write_precomputed_x_minus_xi_poly_splits_to_file(
   }
   // Generates poly from roots
   std::vector<GF2E> x_first_half_poly = build_from_roots(x_first_half_roots);
-  // Writes poly to file
-  size_t len_first_poly = x_first_half_poly.size();
-  for (size_t i = 0; i < len_first_poly; ++i) {
-    file << x_first_half_poly[i] << ",";
-  }
-  file << std::endl;
+  // Save poly
+  precomputed_x_minus_xi.push_back(x_first_half_poly);
   // Recurssion with the first half roots
-  write_precomputed_x_minus_xi_poly_splits_to_file(x_first_half_roots, file);
+  precompute_x_minus_xi_poly_splits(x_first_half_roots, precomputed_x_minus_xi);
 
   // Gets the second half roots
   std::vector<GF2E> x_second_half_roots;
@@ -462,14 +391,11 @@ void write_precomputed_x_minus_xi_poly_splits_to_file(
   }
   // Generates poly from roots
   std::vector<GF2E> x_second_half_poly = build_from_roots(x_second_half_roots);
-  // Write poly to file
-  size_t len_second_poly = x_second_half_poly.size();
-  for (size_t i = 0; i < len_second_poly; i++) {
-    file << x_second_half_poly[i] << ",";
-  }
-  file << std::endl;
+  // Save poly
+  precomputed_x_minus_xi.push_back(x_second_half_poly);
   // Recurssion with the second half roots
-  write_precomputed_x_minus_xi_poly_splits_to_file(x_second_half_roots, file);
+  precompute_x_minus_xi_poly_splits(x_second_half_roots,
+                                    precomputed_x_minus_xi);
 }
 
 // Computing the precomputable part of the plain langrange interpolation
