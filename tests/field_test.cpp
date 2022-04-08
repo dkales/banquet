@@ -299,9 +299,9 @@ TEST_CASE("optmized custom == custom interpolation", "[field]") {
 
 TEST_CASE("fast interpolation == optmized custom interpolation", "[field]") {
 
-  const size_t ROOT_SIZE = 16384;
+  const size_t ROOT_SIZE = 1024;
 
-  auto start_preprocessing_slow = std::chrono::system_clock::now();
+  // auto start_preprocessing_slow = std::chrono::system_clock::now();
   std::vector<field::GF2E> x_opti =
       field::get_first_n_field_elements(ROOT_SIZE);
   std::vector<field::GF2E> y_opti =
@@ -313,24 +313,24 @@ TEST_CASE("fast interpolation == optmized custom interpolation", "[field]") {
   std::vector<std::vector<field::GF2E>> x_lag =
       field::precompute_lagrange_polynomials(x_opti, x_minus_xi_poly_opti);
 
-  auto end_preprocessing_slow =
-      std::chrono::system_clock::now() - start_preprocessing_slow;
-  std::cout << "Optmized Slow Time to precomp - "
-            << end_preprocessing_slow / std::chrono::milliseconds(1) << "ms"
-            << std::endl;
+  // auto end_preprocessing_slow =
+  //     std::chrono::system_clock::now() - start_preprocessing_slow;
+  // std::cout << "Optmized Slow Time to precomp - "
+  //           << end_preprocessing_slow / std::chrono::milliseconds(1) << "ms"
+  //           << std::endl;
 
-  auto start_interpolation_slow = std::chrono::system_clock::now();
+  // auto start_interpolation_slow = std::chrono::system_clock::now();
 
   std::vector<field::GF2E> result_optim =
       field::interpolate_with_precomputation(x_lag, y_opti);
 
-  auto end_interpolation_slow =
-      std::chrono::system_clock::now() - start_interpolation_slow;
-  std::cout << "Optmized Slow Time to interpolate - "
-            << end_interpolation_slow / std::chrono::milliseconds(1) << "ms"
-            << std::endl;
+  // auto end_interpolation_slow =
+  //     std::chrono::system_clock::now() - start_interpolation_slow;
+  // std::cout << "Optmized Slow Time to interpolate - "
+  //           << end_interpolation_slow / std::chrono::milliseconds(1) << "ms"
+  //           << std::endl;
 
-  auto start_preprocessing = std::chrono::system_clock::now();
+  // auto start_preprocessing = std::chrono::system_clock::now();
   std::vector<field::GF2E> x_fast =
       field::get_first_n_field_elements(ROOT_SIZE);
   std::vector<field::GF2E> y_fast =
@@ -351,23 +351,23 @@ TEST_CASE("fast interpolation == optmized custom interpolation", "[field]") {
   field::read_precomputed_x_minus_xi_poly_splits_to_file(
       precomputed_x_minus_xi_poly_splits, x_fast.size(), file_in);
 
-  auto end_preprocessing =
-      std::chrono::system_clock::now() - start_preprocessing;
-  std::cout << "Fast Time to precomp - "
-            << end_preprocessing / std::chrono::milliseconds(1) << "ms"
-            << std::endl;
+  // auto end_preprocessing =
+  //     std::chrono::system_clock::now() - start_preprocessing;
+  // std::cout << "Fast Time to precomp - "
+  //           << end_preprocessing / std::chrono::milliseconds(1) << "ms"
+  //           << std::endl;
 
-  auto start_interpolation = std::chrono::system_clock::now();
+  // auto start_interpolation = std::chrono::system_clock::now();
 
   std::vector<field::GF2E> result_fast = field::interpolate_with_recurrsion(
       y_fast, precomputed_denominator, precomputed_x_minus_xi_poly_splits, 0,
       x_fast.size(), 0, precomputed_x_minus_xi_poly_splits.size());
 
-  auto end_interpolation =
-      std::chrono::system_clock::now() - start_interpolation;
-  std::cout << "Fast Time to interpolate - "
-            << end_interpolation / std::chrono::milliseconds(1) << "ms"
-            << std::endl;
+  // auto end_interpolation =
+  //     std::chrono::system_clock::now() - start_interpolation;
+  // std::cout << "Fast Time to interpolate - "
+  //           << end_interpolation / std::chrono::milliseconds(1) << "ms"
+  //           << std::endl;
 
   REQUIRE(result_fast == result_optim);
 }
