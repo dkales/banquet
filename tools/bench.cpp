@@ -34,6 +34,7 @@
 #include "bench_timing.h"
 #include "bench_utils.h"
 
+#include <chrono>
 #include <cinttypes>
 #include <cstdint>
 #include <cstdio>
@@ -116,9 +117,13 @@ int main(int argc, char **argv) {
   bench_options_t opts = {PARAMETER_SET_INVALID, 0};
   int ret = parse_args(&opts, argc, argv) ? 0 : -1;
 
+  auto start = std::chrono::system_clock::now();
   if (!ret) {
     bench_sign_and_verify(&opts);
   }
+  auto end = std::chrono::system_clock::now() - start;
+  std::cout << "Benchmark TIme - " << end / std::chrono::milliseconds(1) << "ms"
+            << std::endl;
 
   return ret;
 }

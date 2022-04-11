@@ -179,6 +179,31 @@ std::ostream &operator<<(std::ostream &os, const GF2E &ele) {
 
 GF2E GF2E::inverse() const { return GF2E(mod_inverse(this->data, modulus)); }
 
+GF2E GF2E::inverse_fast() const {
+  constexpr uint64_t u[8] = {1, 2, 3, 5, 7, 14, 28, 31};
+  constexpr uint64_t u_len = sizeof(u) / sizeof(u[0]);
+  // q = u[i] - u[i - 1] should give us the corresponding values
+  // (1, 1, 2, 2, 7, 14, 3), which will have corresponding indexes
+  constexpr uint64_t q_index[u_len - 1] = {0, 0, 1, 1, 4, 5, 2};
+  GF2E b[u_len];
+
+  b[0] = this->data;
+
+  for (size_t i = 1; i < u_len; ++i) {
+
+    GF2E b_p = b[i - 1];
+    GF2E b_q = b[q_index[i - 1]];
+
+    for (uint64_t m = u[q_index[i - 1]]; m; --m) {
+      b_p *= b_p;
+    }
+
+    b[i] = b_p * b_q;
+  }
+
+  return b[u_len - 1] * b[u_len - 1];
+}
+
 void GF2E::to_bytes(uint8_t *out) const {
   uint64_t be_data = htole64(data);
   memcpy(out, (uint8_t *)(&be_data), byte_size);
@@ -401,7 +426,7 @@ void precompute_x_minus_xi_poly_splits(
 // Computing the precomputable part of the plain langrange interpolation
 // (not-optimized)
 std::vector<std::vector<GF2E>>
-precompute_lagrange_polynomials(const std::vector<GF2E> &x_values) {
+precompute_lagrange_polynomials_slow(const std::vector<GF2E> &x_values) {
   size_t m = x_values.size();
   std::vector<std::vector<GF2E>> precomputed_lagrange_polynomials;
   precomputed_lagrange_polynomials.reserve(m);
@@ -430,18 +455,19 @@ precompute_lagrange_polynomials(const std::vector<GF2E> &x_values) {
 // Computing the precomputable part of the plain langrange interpolation
 // (optimized)
 std::vector<std::vector<GF2E>>
-precompute_lagrange_polynomials(const std::vector<GF2E> &x_values,
-                                const std::vector<GF2E> x_minus_xi) {
+precompute_lagrange_polynomials(const std::vector<GF2E> &x_values) {
+
   size_t m = x_values.size();
   std::vector<std::vector<GF2E>> precomputed_lagrange_polynomials;
   precomputed_lagrange_polynomials.reserve(m);
 
-  for (size_t k = 0; k < m; k++) {
+  std::vector<GF2E> x_minus_xi = build_from_roots(x_values);
+  for (size_t k = 0; k < m; ++k) {
 
     std::vector<GF2E> numerator = x_minus_xi / x_values[k];
 
-    numerator = eval(numerator, x_values[k]).inverse() * numerator;
-    precomputed_lagrange_polynomials.push_back(numerator);
+    precomputed_lagrange_polynomials.push_back(
+        eval(numerator, x_values[k]).inverse() * numerator);
   }
 
   return precomputed_lagrange_polynomials;

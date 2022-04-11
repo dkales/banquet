@@ -50,6 +50,8 @@ public:
 
   GF2E inverse() const;
 
+  GF2E inverse_fast() const;
+
   void to_bytes(uint8_t *out) const;
   std::vector<uint8_t> to_bytes() const;
   void from_bytes(uint8_t *in);
@@ -92,11 +94,10 @@ void precompute_x_minus_xi_poly_splits(
     std::vector<std::vector<GF2E>> &precomputed_x_minus_xi);
 
 std::vector<std::vector<GF2E>>
-precompute_lagrange_polynomials(const std::vector<GF2E> &x_values);
+precompute_lagrange_polynomials_slow(const std::vector<GF2E> &x_values);
 
 std::vector<std::vector<GF2E>>
-precompute_lagrange_polynomials(const std::vector<GF2E> &x_values,
-                                const std::vector<GF2E> x_minus_xi);
+precompute_lagrange_polynomials(const std::vector<GF2E> &x_values);
 
 std::vector<GF2E> interpolate_with_precomputation(
     const std::vector<std::vector<GF2E>> &precomputed_lagrange_polynomials,
@@ -114,8 +115,7 @@ std::vector<GF2E> interpolate_with_recurrsion(
     const size_t x_minus_xi_first_index, const size_t x_minus_xi_length);
 
 std::vector<GF2E> get_first_n_field_elements(size_t n);
-std::vector<std::vector<GF2E>>
-precompute_lagrange_polynomials(const std::vector<GF2E> &x_values);
+
 std::vector<GF2E> interpolate_with_precomputation(
     const std::vector<std::vector<GF2E>> &precomputed_lagrange_polynomials,
     const std::vector<GF2E> &y_values);
