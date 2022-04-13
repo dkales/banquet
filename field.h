@@ -25,6 +25,7 @@ class GF2E {
   uint64_t data;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wignored-attributes"
+  static std::function<uint64_t(__m128i)> reduce_naive;
   static std::function<uint64_t(__m128i)> reduce;
 #pragma GCC diagnostic pop
   static size_t byte_size;
@@ -49,6 +50,8 @@ public:
   bool operator!=(const GF2E &other) const;
 
   GF2E inverse() const;
+
+  GF2E sqr() const;
 
   GF2E inverse_fast() const;
 

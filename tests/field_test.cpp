@@ -5,7 +5,7 @@
 #include "utils.h"
 
 #include <NTL/GF2EX.h>
-/*
+
 TEST_CASE("Basic Arithmetic in all fields", "[field]") {
   banquet_params_t params[] = {Banquet_L1_Param1, Banquet_L1_Param3,
                                Banquet_L1_Param4};
@@ -67,7 +67,19 @@ TEST_CASE("Modular Arithmetic GF(2^32)", "[field]") {
   field::GF2E b_2(234130046);
   REQUIRE(a * b == ab);
   REQUIRE(a * a == a_2);
+  REQUIRE(a.sqr() == a_2);
   REQUIRE(b * b == b_2);
+  REQUIRE(b.sqr() == b_2);
+}
+
+TEST_CASE("Modular Arithmetic GF(2^16)", "[field]") {
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L0_Param1));
+  field::GF2E a;
+  a.set_coeff(5);
+  a.set_coeff(8);
+  a.set_coeff(15);
+
+  REQUIRE(a.sqr() == a * a);
 }
 
 TEST_CASE("Modular Arithmetic GF(2^40)", "[field]") {
@@ -79,6 +91,7 @@ TEST_CASE("Modular Arithmetic GF(2^40)", "[field]") {
   field::GF2E b_2(153370336291ULL);
   REQUIRE(a * b == ab);
   REQUIRE(a * a == a_2);
+  REQUIRE(a.sqr() == a_2);
   REQUIRE(b * b == b_2);
 }
 
@@ -91,6 +104,7 @@ TEST_CASE("Modular Arithmetic GF(2^48)", "[field]") {
   field::GF2E b_2(119412372920018ULL);
   REQUIRE(a * b == ab);
   REQUIRE(a * a == a_2);
+  REQUIRE(a.sqr() == a_2);
   REQUIRE(b * b == b_2);
 }
 
@@ -206,7 +220,7 @@ TEST_CASE("NTL to custom conversion", "[field]") {
     field::GF2E b2 = utils::ntl_to_custom(b_ntl);
     REQUIRE(b == b2);
   }
-} */
+}
 
 TEST_CASE("NTL inverse == custom", "[field]") {
   utils::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
@@ -229,13 +243,91 @@ TEST_CASE("NTL inverse == custom", "[field]") {
   std::cout << "a inverse " << a.inverse() << std::endl;
   std::cout << "a inverse fast " << a.inverse_fast() << std::endl;
 
+  auto start = std::chrono::system_clock::now();
+  for (uint64_t i = 0; i < 1000000; ++i) {
+    a.inverse_fast();
+  }
+  auto end = std::chrono::system_clock::now() - start;
+  std::cout << "fast inverse - " << std::dec
+            << end / std::chrono::milliseconds(1);
+  std::cout << "ms" << std::endl;
+
+  start = std::chrono::system_clock::now();
+  for (uint64_t i = 0; i < 1000000; ++i) {
+    a.inverse();
+  }
+  end = std::chrono::system_clock::now() - start;
+  std::cout << "slow inverse - " << std::dec
+            << end / std::chrono::milliseconds(1);
+  std::cout << "ms" << std::endl;
+
   field::GF2E b = a.inverse();
   field::GF2E c = utils::ntl_to_custom(inv(utils::custom_to_ntl(a)));
+  field::GF2E d = a.inverse_fast();
   REQUIRE(b == c);
+  REQUIRE(d == c);
   REQUIRE(a * b == field::GF2E(1));
 }
 
-/* TEST_CASE("NTL interpolation == custom", "[field]") {
+// TEST_CASE("RANDOM TESTS") {
+
+//   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L0_Param1));
+//   field::GF2E a;
+//   a.set_coeff(15);
+//   a.set_coeff(7);
+//   a.sqr();
+//   a = a * a;
+
+//   std::cout << " NEXT " << std::endl;
+
+//   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
+//   field::GF2E b;
+//   b.set_coeff(31);
+//   b.set_coeff(22);
+//   b.sqr();
+//   b = b * b;
+
+//   std::cout << " NEXT " << std::endl;
+
+//   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param3));
+//   field::GF2E c;
+//   c.set_coeff(38);
+//   c.set_coeff(31);
+//   c.sqr();
+//   c = c * c;
+
+//   std::cout << " NEXT " << std::endl;
+
+//   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param4));
+//   field::GF2E d;
+//   d.set_coeff(47);
+//   d.set_coeff(46);
+//   d.sqr();
+//   d = d * d;
+
+//   std::cout << " NEXT " << std::endl;
+
+//   // field::GF2E a_sq = a.sqr();
+//   // auto start = std::chrono::system_clock::now();
+//   // for (uint64_t i = 0; i < 100000000; ++i) {
+//   //   field::GF2E out = a.sqr();
+//   // }
+//   // auto end = std::chrono::system_clock::now() - start;
+//   // std::cout << "fast sqr - " << a.sqr() << " - ";
+//   // std::cout << std::dec << end / std::chrono::milliseconds(1);
+//   // std::cout << "ms" << std::endl;
+
+//   // start = std::chrono::system_clock::now();
+//   // for (uint64_t i = 0; i < 100000000; ++i) {
+//   //   field::GF2E out = a * a;
+//   // }
+//   // end = std::chrono::system_clock::now() - start;
+//   // std::cout << "slow sqr - " << a * a << " - ";
+//   // std::cout << std::dec << end / std::chrono::milliseconds(1);
+//   // std::cout << "ms" << std::endl;
+// }
+
+TEST_CASE("NTL interpolation == custom", "[field]") {
   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
   utils::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
 
@@ -315,4 +407,4 @@ TEST_CASE("fast interpolation == optmized custom interpolation", "[field]") {
       0, precomputed_x_minus_xi.size());
 
   REQUIRE(result_fast == result_optim);
-} */
+}
