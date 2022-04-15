@@ -19,7 +19,8 @@ for test in testruns:
     # second line is header:
     print(lines[0])
     lines.pop(0)
-
+    #ignore the first run
+    lines.pop(0)
     count = 0
     keygen, sign, ver, size, ser, deser = 0, 0, 0, 0, 0, 0
 

@@ -118,12 +118,15 @@ int main(int argc, char **argv) {
   int ret = parse_args(&opts, argc, argv) ? 0 : -1;
 
   auto start = std::chrono::system_clock::now();
+  size_t loop = 20;
   if (!ret) {
-    bench_sign_and_verify(&opts);
+    for (size_t i = 0; i < loop; ++i) {
+      bench_sign_and_verify(&opts);
+    }
   }
   auto end = std::chrono::system_clock::now() - start;
-  std::cout << "Benchmark TIme - " << end / std::chrono::milliseconds(1) << "ms"
-            << std::endl;
+  std::cout << "Benchmark TIme - "
+            << (end / loop) / std::chrono::milliseconds(1) << "ms" << std::endl;
 
   return ret;
 }

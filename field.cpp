@@ -38,8 +38,8 @@ inline __m128i clmul(uint64_t a, uint64_t b) {
   return _mm_clmulepi64_si128(_mm_set_epi64x(0, a), _mm_set_epi64x(0, b), 0);
 }
 
-// actually a bit slowerthan naive version below ion some CPU version perhaps ??
-__attribute__((unused)) uint64_t reduce_GF2_16_barret(__m128i in) {
+// actually a bit slowerthan naive version below on some CPU version perhaps ??
+uint64_t reduce_GF2_16_barret(__m128i in) {
   // modulus = x^16 + x^5 + x^3 + x + 1
   constexpr uint64_t lower_mask = 0xFFFFULL;
   constexpr uint64_t P =
@@ -61,9 +61,31 @@ uint64_t reduce_GF2_16(__m128i in) {
             (R_upper << 0);
   return lower_mask & R_lower;
 }
+// actually this is slower than the above two :(
+uint64_t reduce_GF2_16_clmul(const __m128i in) {
+  // modulus = x^16 + x^5 + x^3 + x + 1
+  __m128i p = _mm_set_epi64x(0x0, 0x2B);
+  __m128i mask = _mm_set_epi64x(0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFF0000);
+  __m128i t;
 
-// actually a bit slowerthan naive version below ion some CPU version perhaps ??
-__attribute__((unused)) uint64_t reduce_GF2_32_barret(__m128i in) {
+  __m128i hi = _mm_srli_si128(in, 2); // extracting the in_hi
+  __m128i low =
+      _mm_xor_si128(_mm_or_si128(in, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // in_hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 4 + 16 -> Length after xor
+
+  hi = _mm_srli_si128(t, 2);                        // extracting the t_hi
+  low = _mm_xor_si128(_mm_or_si128(t, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // t_hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 16 -> Length after xor
+
+  return _mm_extract_epi64(t, 0);
+}
+
+// actually a bit slowerthan naive version below on some CPU version perhaps ??
+uint64_t reduce_GF2_32_barret(__m128i in) {
   // modulus = x^32 + x^7 + x^3 + x^2 + 1
   constexpr uint64_t lower_mask = 0xFFFFFFFFULL;
   constexpr uint64_t P =
@@ -84,9 +106,31 @@ uint64_t reduce_GF2_32(__m128i in) {
             (R_upper << 0);
   return lower_mask & R_lower;
 }
+// actually this is slower than the above two :(
+uint64_t reduce_GF2_32_clmul(const __m128i in) {
+  // modulus = x^32 + x^7 + x^3 + x^2 + 1
+  __m128i p = _mm_set_epi64x(0x0, 0x8d);
+  __m128i mask = _mm_set_epi64x(0xFFFFFFFFFFFFFFFF, 0xFFFFFFFF00000000);
+  __m128i t;
 
-// actually a bit slowerthan naive version below ion some CPU version perhaps ??
-__attribute__((unused)) uint64_t reduce_GF2_40_barret(__m128i in) {
+  __m128i hi = _mm_srli_si128(in, 4); // extracting the in_hi
+  __m128i low =
+      _mm_xor_si128(_mm_or_si128(in, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // in_hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 4 + 32 -> Length after xor
+
+  hi = _mm_srli_si128(t, 4);                        // extracting the t_hi
+  low = _mm_xor_si128(_mm_or_si128(t, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // t_hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 16 -> Length after xor
+
+  return _mm_extract_epi64(t, 0);
+}
+
+// actually a bit slowerthan naive version below on some CPU version perhaps ??
+uint64_t reduce_GF2_40_barret(__m128i in) {
   // modulus = x^40 + x^5 + x^4 + x^3 + 1
   constexpr uint64_t upper_mask = 0xFFFFULL;
   constexpr uint64_t lower_mask = 0xFFFFFFFFFFULL;
@@ -114,9 +158,30 @@ uint64_t reduce_GF2_40(__m128i in) {
             (R_upper << 0);
   return lower_mask & R_lower;
 }
+uint64_t reduce_GF2_40_clmul(const __m128i in) {
+  // modulus = x^40 + x^5 + x^4 + x^3 + 1
+  __m128i p = _mm_set_epi64x(0x0, 0x39);
+  __m128i mask = _mm_set_epi64x(0xFFFFFFFFFFFFFFFF, 0xFFFFFF0000000000);
+  __m128i t;
 
-// actually a bit slowerthan naive version below ion some CPU version perhaps ??
-__attribute__((unused)) uint64_t reduce_GF2_48_barret(__m128i in) {
+  __m128i hi = _mm_srli_si128(in, 5); // extracting the hi
+  __m128i low =
+      _mm_xor_si128(_mm_or_si128(in, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 4 + 40 -> Length after xor
+
+  hi = _mm_srli_si128(t, 5);                        // extracting the hi
+  low = _mm_xor_si128(_mm_or_si128(t, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 40 -> Length after xor
+
+  return _mm_extract_epi64(t, 0);
+}
+
+// actually a bit slowerthan naive version below on some CPU version perhaps ??
+uint64_t reduce_GF2_48_barret(__m128i in) {
   // modulus = x^48 + x^5 + x^3 + x^2 + 1
   constexpr uint64_t upper_mask = 0xFFFFFFFFULL;
   constexpr uint64_t lower_mask = 0xFFFFFFFFFFFFULL;
@@ -142,6 +207,28 @@ uint64_t reduce_GF2_48(__m128i in) {
   R_lower = R_lower ^ (R_upper << 5) ^ (R_upper << 3) ^ (R_upper << 2) ^
             (R_upper << 0);
   return lower_mask & R_lower;
+}
+// actually this is slower than the above two :(
+uint64_t reduce_GF2_48_clmul(const __m128i in) {
+  // modulus = x^48 + x^5 + x^3 + x^2 + 1
+  __m128i p = _mm_set_epi64x(0x0, 0x2d);
+  __m128i mask = _mm_set_epi64x(0xFFFFFFFFFFFFFFFF, 0xFFFF000000000000);
+  __m128i t;
+
+  __m128i hi = _mm_srli_si128(in, 6); // extracting the hi
+  __m128i low =
+      _mm_xor_si128(_mm_or_si128(in, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 4 + 48 -> Length after xor
+
+  hi = _mm_srli_si128(t, 6);                        // extracting the hi
+  low = _mm_xor_si128(_mm_or_si128(t, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 48 -> Length after xor
+
+  return _mm_extract_epi64(t, 0);
 }
 
 uint64_t GF2_euclidean_div_quotient(uint64_t a, uint64_t b) {
@@ -179,8 +266,11 @@ uint64_t mod_inverse(uint64_t a, uint64_t mod) {
 namespace field {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wignored-attributes"
-std::function<uint64_t(__m128i)> GF2E::reduce = nullptr;
-std::function<uint64_t(__m128i)> GF2E::reduce_naive = nullptr;
+
+uint64_t (*GF2E::reduce_naive)(__m128i);
+uint64_t (*GF2E::reduce_barret)(__m128i);
+uint64_t (*GF2E::reduce_clmul)(__m128i);
+
 #pragma GCC diagnostic pop
 size_t GF2E::byte_size = 0;
 uint64_t GF2E::modulus = 0;
@@ -200,10 +290,10 @@ GF2E &GF2E::operator-=(const GF2E &other) {
   return *this;
 }
 GF2E GF2E::operator*(const GF2E &other) const {
-  return GF2E(reduce_naive(clmul(this->data, other.data)));
+  return GF2E(reduce_clmul(clmul(this->data, other.data)));
 }
 GF2E &GF2E::operator*=(const GF2E &other) {
-  this->data = reduce_naive(clmul(this->data, other.data));
+  this->data = reduce_clmul(clmul(this->data, other.data));
   return *this;
 }
 bool GF2E::operator==(const GF2E &other) const {
@@ -220,6 +310,8 @@ std::ostream &operator<<(std::ostream &os, const GF2E &ele) {
 
 GF2E GF2E::inverse() const { return GF2E(mod_inverse(this->data, modulus)); }
 
+// This is not faster than calling the operand because we are squaring numbers
+// in GF2_X where X is less than 64
 GF2E GF2E::sqr() const {
 
   __m128i tmp[2];
@@ -240,32 +332,94 @@ GF2E GF2E::sqr() const {
 
   res = _mm_unpacklo_epi8(tmp[0], tmp[1]);
 
-  return GF2E(reduce(res));
+  return GF2E(reduce_clmul(res));
 }
 
-// This is actually slow, reduction only with GF_2 32
-GF2E GF2E::inverse_fast() const {
-  constexpr uint64_t u[8] = {1, 2, 3, 5, 7, 14, 28, 31};
-  constexpr uint64_t u_len = sizeof(u) / sizeof(u[0]);
-  // q = u[i] - u[i - 1] should give us the corresponding values
-  // (1, 1, 2, 2, 7, 14, 3), which will have corresponding indexes
-  constexpr uint64_t q_index[u_len - 1] = {0, 0, 1, 1, 4, 5, 2};
-  GF2E b[u_len];
+// This is actually slow than the other inverse inplementation but this has
+// constant time, so gets better with larger root size and field size
+GF2E GF2E::inverse_const_time() const {
 
-  b[0] = this->data;
-
-  for (size_t i = 1; i < u_len; ++i) {
-
-    GF2E b_p = b[i - 1];
-    GF2E b_q = b[q_index[i - 1]];
-
-    for (uint64_t m = u[q_index[i - 1]]; m; --m) {
-      b_p = b_p.sqr();
+  switch (this->byte_size) {
+  case 2: {
+    constexpr uint64_t u[6] = {1, 2, 3, 6, 12, 15};
+    constexpr uint64_t u_len = sizeof(u) / sizeof(u[0]);
+    // q = u[i] - u[i - 1] should give us the corresponding values
+    // (1, 1, 3, 6, 3), which will have corresponding indexes
+    constexpr uint64_t q_index[u_len - 1] = {0, 0, 2, 3, 2};
+    GF2E b[u_len];
+    b[0] = this->data;
+    for (size_t i = 1; i < u_len; ++i) {
+      GF2E b_p = b[i - 1];
+      GF2E b_q = b[q_index[i - 1]];
+      for (uint64_t m = u[q_index[i - 1]]; m; --m) {
+        b_p = b_p.sqr();
+      }
+      b[i] = reduce_clmul(clmul(b_p.data, b_q.data));
     }
-    b[i] = reduce(clmul(b_p.data, b_q.data));
+    return b[u_len - 1].sqr();
+    break;
   }
-
-  return b[u_len - 1].sqr();
+  case 4: {
+    constexpr uint64_t u[8] = {1, 2, 3, 5, 7, 14, 28, 31};
+    constexpr uint64_t u_len = sizeof(u) / sizeof(u[0]);
+    // q = u[i] - u[i - 1] should give us the corresponding values
+    // (1, 1, 2, 2, 7, 14, 3), which will have corresponding indexes
+    constexpr uint64_t q_index[u_len - 1] = {0, 0, 1, 1, 4, 5, 2};
+    GF2E b[u_len];
+    b[0] = this->data;
+    for (size_t i = 1; i < u_len; ++i) {
+      GF2E b_p = b[i - 1];
+      GF2E b_q = b[q_index[i - 1]];
+      for (uint64_t m = u[q_index[i - 1]]; m; --m) {
+        b_p = b_p.sqr();
+      }
+      b[i] = reduce_clmul(clmul(b_p.data, b_q.data));
+    }
+    return b[u_len - 1].sqr();
+    break;
+  }
+  case 5: {
+    constexpr uint64_t u[8] = {1, 2, 3, 6, 12, 24, 27, 39};
+    constexpr uint64_t u_len = sizeof(u) / sizeof(u[0]);
+    // q = u[i] - u[i - 1] should give us the corresponding values
+    // (1, 1, 3, 6, 12, 3, 12), which will have corresponding indexes
+    constexpr uint64_t q_index[u_len - 1] = {0, 0, 2, 3, 4, 2, 4};
+    GF2E b[u_len];
+    b[0] = this->data;
+    for (size_t i = 1; i < u_len; ++i) {
+      GF2E b_p = b[i - 1];
+      GF2E b_q = b[q_index[i - 1]];
+      for (uint64_t m = u[q_index[i - 1]]; m; --m) {
+        b_p = b_p.sqr();
+      }
+      b[i] = reduce_clmul(clmul(b_p.data, b_q.data));
+    }
+    return b[u_len - 1].sqr();
+    break;
+  }
+  case 6: {
+    constexpr uint64_t u[9] = {1, 2, 3, 5, 10, 20, 23, 46, 47};
+    constexpr uint64_t u_len = sizeof(u) / sizeof(u[0]);
+    // q = u[i] - u[i - 1] should give us the corresponding values
+    // (1, 1, 2, 5, 10, 3, 23, 1), which will have corresponding indexes
+    constexpr uint64_t q_index[u_len - 1] = {0, 0, 1, 3, 4, 2, 6, 0};
+    GF2E b[u_len];
+    b[0] = this->data;
+    for (size_t i = 1; i < u_len; ++i) {
+      GF2E b_p = b[i - 1];
+      GF2E b_q = b[q_index[i - 1]];
+      for (uint64_t m = u[q_index[i - 1]]; m; --m) {
+        b_p = b_p.sqr();
+      }
+      b[i] = reduce_clmul(clmul(b_p.data, b_q.data));
+    }
+    return b[u_len - 1].sqr();
+    break;
+  }
+  default:
+    return GF2E(this->data);
+    break;
+  }
 }
 
 void GF2E::to_bytes(uint8_t *out) const {
@@ -294,7 +448,8 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
     modulus =
         (1ULL << 16) | (1ULL << 5) | (1ULL << 3) | (1ULL << 1) | (1ULL << 0);
     reduce_naive = reduce_GF2_16;
-    reduce = reduce_GF2_16_barret;
+    reduce_barret = reduce_GF2_16_barret;
+    reduce_clmul = reduce_GF2_16_clmul;
     byte_size = 2;
     // Ring morphism:
     //   From: Finite Field in x of size 2^8
@@ -316,7 +471,8 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
     modulus =
         (1ULL << 32) | (1ULL << 7) | (1ULL << 3) | (1ULL << 2) | (1ULL << 0);
     reduce_naive = reduce_GF2_32;
-    reduce = reduce_GF2_32_barret;
+    reduce_barret = reduce_GF2_32_barret;
+    reduce_clmul = reduce_GF2_32_clmul;
     byte_size = 4;
     // Ring morphism:
     //   From: Finite Field in x of size 2^8
@@ -346,7 +502,8 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
     modulus =
         (1ULL << 40) | (1ULL << 5) | (1ULL << 4) | (1ULL << 3) | (1ULL << 0);
     reduce_naive = reduce_GF2_40;
-    reduce = reduce_GF2_40_barret;
+    reduce_barret = reduce_GF2_40_barret;
+    reduce_clmul = reduce_GF2_40_clmul;
     byte_size = 5;
     // Ring morphism:
     //   From: Finite Field in x of size 2^8
@@ -375,7 +532,8 @@ void GF2E::init_extension_field(const banquet_instance_t &instance) {
     modulus =
         (1ULL << 48) | (1ULL << 5) | (1ULL << 3) | (1ULL << 2) | (1ULL << 0);
     reduce_naive = reduce_GF2_48;
-    reduce = reduce_GF2_48_barret;
+    reduce_barret = reduce_GF2_48_barret;
+    reduce_clmul = reduce_GF2_48_clmul;
     byte_size = 6;
     // Ring morphism:
     //   From: Finite Field in x of size 2^8
@@ -521,7 +679,7 @@ precompute_lagrange_polynomials_slow(const std::vector<GF2E> &x_values) {
 }
 
 // Computing the precomputable part of the plain langrange interpolation
-// (optimized)
+// (optimized) (fast only with large root sizes)
 std::vector<std::vector<GF2E>>
 precompute_lagrange_polynomials(const std::vector<GF2E> &x_values) {
 
@@ -693,7 +851,7 @@ field::GF2E dot_product(const std::vector<field::GF2E> &lhs,
   for (size_t i = 0; i < lhs.size(); i++)
     accum = _mm_xor_si128(accum, clmul(lhs[i].data, rhs[i].data));
 
-  field::GF2E result(field::GF2E::reduce_naive(accum));
+  field::GF2E result(field::GF2E::reduce_clmul(accum));
   return result;
 }
 
@@ -728,14 +886,16 @@ std::vector<field::GF2E> operator/(const std::vector<field::GF2E> &lhs,
                                    const field::GF2E &rhs) {
   std::vector<field::GF2E> temp(lhs);
   size_t end_index = temp.size() - 1;
+
   std::vector<field::GF2E> result;
   result.reserve(end_index);
-  for (size_t i = end_index; i > 0; --i) {
-    field::GF2E t = temp[i] * rhs;
-    temp[i - 1] -= t;
+
+  for (size_t i = end_index; i; --i) {
+    temp[i - 1] -= temp[i] * rhs;
   }
-  for (size_t i = 1; i <= end_index; i++) {
+  for (size_t i = 1; i <= end_index; ++i) {
     result.push_back(temp[i]);
   }
+
   return result;
 }

@@ -25,8 +25,9 @@ class GF2E {
   uint64_t data;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wignored-attributes"
-  static std::function<uint64_t(__m128i)> reduce_naive;
-  static std::function<uint64_t(__m128i)> reduce;
+  static uint64_t (*reduce_naive)(__m128i);
+  static uint64_t (*reduce_barret)(__m128i);
+  static uint64_t (*reduce_clmul)(__m128i);
 #pragma GCC diagnostic pop
   static size_t byte_size;
   static uint64_t modulus;
@@ -53,7 +54,7 @@ public:
 
   GF2E sqr() const;
 
-  GF2E inverse_fast() const;
+  GF2E inverse_const_time() const;
 
   void to_bytes(uint8_t *out) const;
   std::vector<uint8_t> to_bytes() const;
@@ -124,7 +125,9 @@ std::vector<GF2E> interpolate_with_precomputation(
     const std::vector<GF2E> &y_values);
 
 std::vector<GF2E> build_from_roots(const std::vector<GF2E> &roots);
+
 GF2E eval(const std::vector<GF2E> &poly, const GF2E &point);
+
 } // namespace field
 
 std::vector<field::GF2E> operator+(const std::vector<field::GF2E> &lhs,

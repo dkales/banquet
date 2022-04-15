@@ -475,32 +475,19 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   std::vector<std::vector<field::GF2E>> r_ejs = phase_1_expand(instance, h_1);
 
   /////////////////////////////////////////////////////////////////////////////
-  // phase 3: commit to the checking polynomials
-  /////////////////////////////////////////////////////////////////////////////
-
-  // a vector of the first m2+1 field elements for interpolation
+  // phase 3: commit to the checking polynomialsresult[i + j] += lhs[i] *
+  // rhs[j]; a vector of the first m2+1 field elements for interpolation
   std::vector<field::GF2E> x_values_for_interpolation_zero_to_m2 =
       field::get_first_n_field_elements(instance.m2 + 1);
   // a vector of the first m2+1 field elements for interpolation
   std::vector<field::GF2E> x_values_for_interpolation_zero_to_2m2 =
       field::get_first_n_field_elements(2 * instance.m2 + 1);
 
-  // Precomputation for the slow interpolation
-  /* std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_m2 =
-      field::precompute_lagrange_polynomials(
-          x_values_for_interpolation_zero_to_m2);
-
-  std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_2m2 =
-      field::precompute_lagrange_polynomials(
-          x_values_for_interpolation_zero_to_2m2); */
-
-  // Precomputation for the fast old interpolation
   std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_m2 =
-      field::precompute_lagrange_polynomials(
+      field::precompute_lagrange_polynomials_slow(
           x_values_for_interpolation_zero_to_m2);
-
   std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_2m2 =
-      field::precompute_lagrange_polynomials(
+      field::precompute_lagrange_polynomials_slow(
           x_values_for_interpolation_zero_to_2m2);
 
   std::vector<std::vector<std::vector<std::vector<field::GF2E>>>> s_prime(
@@ -982,22 +969,11 @@ bool banquet_verify(const banquet_instance_t &instance,
   std::vector<field::GF2E> x_values_for_interpolation_zero_to_2m2 =
       field::get_first_n_field_elements(2 * instance.m2 + 1);
 
-  // Precomputation for the slow interpolation
-  /* std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_m2 =
-      field::precompute_lagrange_polynomials(
-          x_values_for_interpolation_zero_to_m2);
-
-  std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_2m2 =
-      field::precompute_lagrange_polynomials(
-          x_values_for_interpolation_zero_to_2m2); */
-
-  // Precomputation for the fast old interpolation
   std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_m2 =
-      field::precompute_lagrange_polynomials(
+      field::precompute_lagrange_polynomials_slow(
           x_values_for_interpolation_zero_to_m2);
-
   std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_2m2 =
-      field::precompute_lagrange_polynomials(
+      field::precompute_lagrange_polynomials_slow(
           x_values_for_interpolation_zero_to_2m2);
 
   std::vector<std::vector<std::vector<std::vector<field::GF2E>>>> s_prime(
