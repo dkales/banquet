@@ -30,6 +30,7 @@ TEST_CASE("Basic Arithmetic in all fields", "[field]") {
     REQUIRE(x * x == x_2);
   }
 }
+
 TEST_CASE("Modular Arithmetic GF(2^32)", "[field]") {
   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
   field::GF2E a, b;
@@ -170,6 +171,7 @@ TEST_CASE("NTL to_bytes = custom to_bytes", "[field]") {
   REQUIRE(buffer_a == buffer_c);
   REQUIRE(buffer_b == buffer_d);
 }
+
 TEST_CASE("NTL to custom conversion", "[field]") {
   banquet_params_t params[] = {Banquet_L1_Param1, Banquet_L1_Param3,
                                Banquet_L1_Param4};
@@ -258,7 +260,7 @@ TEST_CASE("Constant time inverse == custom", "[field]") {
 
 TEST_CASE("RANDOM TESTS") {
 
-  // field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param3));
+  // field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
   // field::GF2E a;
   // a.set_coeff(38);
   // a.set_coeff(31);
@@ -372,6 +374,7 @@ TEST_CASE("fast interpolation == optmized custom interpolation", "[field]") {
       field::get_first_n_field_elements(ROOT_SIZE);
   std::vector<std::vector<field::GF2E>> x_lag =
       field::precompute_lagrange_polynomials(x_opti);
+
   std::vector<field::GF2E> result_optim =
       field::interpolate_with_precomputation(x_lag, y_opti);
 

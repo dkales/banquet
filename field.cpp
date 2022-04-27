@@ -38,7 +38,6 @@ inline __m128i clmul(uint64_t a, uint64_t b) {
   return _mm_clmulepi64_si128(_mm_set_epi64x(0, a), _mm_set_epi64x(0, b), 0);
 }
 
-// actually a bit slowerthan naive version below on some CPU version perhaps ??
 uint64_t reduce_GF2_16_barret(__m128i in) {
   // modulus = x^16 + x^5 + x^3 + x + 1
   constexpr uint64_t lower_mask = 0xFFFFULL;
@@ -61,7 +60,6 @@ uint64_t reduce_GF2_16(__m128i in) {
             (R_upper << 0);
   return lower_mask & R_lower;
 }
-// actually this is slower than the above two :(
 uint64_t reduce_GF2_16_clmul(const __m128i in) {
   // modulus = x^16 + x^5 + x^3 + x + 1
   __m128i p = _mm_set_epi64x(0x0, 0x2B);
@@ -84,7 +82,6 @@ uint64_t reduce_GF2_16_clmul(const __m128i in) {
   return _mm_extract_epi64(t, 0);
 }
 
-// actually a bit slowerthan naive version below on some CPU version perhaps ??
 uint64_t reduce_GF2_32_barret(__m128i in) {
   // modulus = x^32 + x^7 + x^3 + x^2 + 1
   constexpr uint64_t lower_mask = 0xFFFFFFFFULL;
@@ -106,7 +103,6 @@ uint64_t reduce_GF2_32(__m128i in) {
             (R_upper << 0);
   return lower_mask & R_lower;
 }
-// actually this is slower than the above two :(
 uint64_t reduce_GF2_32_clmul(const __m128i in) {
   // modulus = x^32 + x^7 + x^3 + x^2 + 1
   __m128i p = _mm_set_epi64x(0x0, 0x8d);
@@ -129,7 +125,6 @@ uint64_t reduce_GF2_32_clmul(const __m128i in) {
   return _mm_extract_epi64(t, 0);
 }
 
-// actually a bit slowerthan naive version below on some CPU version perhaps ??
 uint64_t reduce_GF2_40_barret(__m128i in) {
   // modulus = x^40 + x^5 + x^4 + x^3 + 1
   constexpr uint64_t upper_mask = 0xFFFFULL;
@@ -180,7 +175,6 @@ uint64_t reduce_GF2_40_clmul(const __m128i in) {
   return _mm_extract_epi64(t, 0);
 }
 
-// actually a bit slowerthan naive version below on some CPU version perhaps ??
 uint64_t reduce_GF2_48_barret(__m128i in) {
   // modulus = x^48 + x^5 + x^3 + x^2 + 1
   constexpr uint64_t upper_mask = 0xFFFFFFFFULL;
@@ -208,7 +202,6 @@ uint64_t reduce_GF2_48(__m128i in) {
             (R_upper << 0);
   return lower_mask & R_lower;
 }
-// actually this is slower than the above two :(
 uint64_t reduce_GF2_48_clmul(const __m128i in) {
   // modulus = x^48 + x^5 + x^3 + x^2 + 1
   __m128i p = _mm_set_epi64x(0x0, 0x2d);
@@ -785,7 +778,6 @@ std::vector<GF2E> build_from_roots(const std::vector<GF2E> &roots) {
 
   std::vector<GF2E> poly(roots);
   poly.push_back(GF2E(0));
-
   GF2E tmp;
   for (size_t k = 1; k < len; k++) {
     tmp = poly[k];
@@ -840,7 +832,6 @@ std::vector<field::GF2E> &operator+=(std::vector<field::GF2E> &lhs,
 // somewhat optimized inner product, only do one lazy reduction
 field::GF2E dot_product(const std::vector<field::GF2E> &lhs,
                         const std::vector<field::GF2E> &rhs) {
-
   if (lhs.size() != rhs.size())
     throw std::runtime_error("adding vectors of different sizes");
 
@@ -848,10 +839,11 @@ field::GF2E dot_product(const std::vector<field::GF2E> &lhs,
   // for (size_t i = 0; i < lhs.size(); i++)
   // result += lhs[i] * rhs[i];
   __m128i accum = _mm_setzero_si128();
-  for (size_t i = 0; i < lhs.size(); i++)
+  for (size_t i = 0; i < lhs.size(); i++) {
     accum = _mm_xor_si128(accum, clmul(lhs[i].data, rhs[i].data));
-
+  }
   field::GF2E result(field::GF2E::reduce_clmul(accum));
+
   return result;
 }
 

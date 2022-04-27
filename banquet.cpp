@@ -381,7 +381,9 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   RepByteContainer rep_shared_t(instance.num_rounds, instance.num_MPC_parties,
                                 instance.aes_params.num_sboxes);
   std::vector<std::vector<uint8_t>> rep_key_deltas;
+  rep_key_deltas.reserve(instance.num_rounds);
   std::vector<std::vector<uint8_t>> rep_t_deltas;
+  rep_t_deltas.reserve(instance.num_rounds);
 
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
 
@@ -484,10 +486,10 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
       field::get_first_n_field_elements(2 * instance.m2 + 1);
 
   std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_m2 =
-      field::precompute_lagrange_polynomials_slow(
+      field::precompute_lagrange_polynomials(
           x_values_for_interpolation_zero_to_m2);
   std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_2m2 =
-      field::precompute_lagrange_polynomials_slow(
+      field::precompute_lagrange_polynomials(
           x_values_for_interpolation_zero_to_2m2);
 
   std::vector<std::vector<std::vector<std::vector<field::GF2E>>>> s_prime(
@@ -736,6 +738,7 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   // phase 7: Open the views of the checking protocol
   /////////////////////////////////////////////////////////////////////////////
   std::vector<reveal_list_t> seeds;
+  seeds.reserve(instance.num_rounds);
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     seeds.push_back(
         seed_trees[repetition].reveal_all_but(missing_parties[repetition]));
@@ -803,6 +806,7 @@ bool banquet_verify(const banquet_instance_t &instance,
 
   // recompute h_2
   std::vector<std::vector<field::GF2E>> P_deltas;
+  P_deltas.reserve(signature.proofs.size());
   for (const banquet_repetition_proof_t &proof : signature.proofs) {
     P_deltas.push_back(proof.P_delta);
   }
@@ -830,8 +834,8 @@ bool banquet_verify(const banquet_instance_t &instance,
     if (missing_parties[repetition] != proof.reveallist.second)
       throw std::runtime_error(
           "modified signature between deserialization and verify");
-    seed_trees.push_back(SeedTree(proof.reveallist, instance.num_MPC_parties,
-                                  signature.salt, repetition));
+    seed_trees.emplace_back(proof.reveallist, instance.num_MPC_parties,
+                            signature.salt, repetition);
     // commit to each party's seed, fill up missing one with data from proof
     {
       std::vector<uint8_t> dummy(instance.seed_size);
@@ -970,10 +974,10 @@ bool banquet_verify(const banquet_instance_t &instance,
       field::get_first_n_field_elements(2 * instance.m2 + 1);
 
   std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_m2 =
-      field::precompute_lagrange_polynomials_slow(
+      field::precompute_lagrange_polynomials(
           x_values_for_interpolation_zero_to_m2);
   std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_2m2 =
-      field::precompute_lagrange_polynomials_slow(
+      field::precompute_lagrange_polynomials(
           x_values_for_interpolation_zero_to_2m2);
 
   std::vector<std::vector<std::vector<std::vector<field::GF2E>>>> s_prime(
@@ -1251,7 +1255,9 @@ banquet_deserialize_signature(const banquet_instance_t &instance,
   current_offset += h_1.size();
   memcpy(h_3.data(), serialized.data() + current_offset, h_3.size());
   current_offset += h_3.size();
+
   std::vector<banquet_repetition_proof_t> proofs;
+  proofs.reserve(instance.num_rounds);
 
   std::vector<uint16_t> missing_parties = phase_3_expand(instance, h_3);
   size_t reveallist_size = ceil_log2(instance.num_MPC_parties);
