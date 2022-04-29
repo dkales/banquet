@@ -295,7 +295,6 @@ bool GF2E::operator==(const GF2E &other) const {
 bool GF2E::operator!=(const GF2E &other) const {
   return this->data != other.data;
 }
-
 std::ostream &operator<<(std::ostream &os, const GF2E &ele) {
   os << "0x" << std::setfill('0') << std::hex << std::setw(8) << ele.get_data();
   return os;
@@ -791,6 +790,42 @@ std::vector<GF2E> build_from_roots(const std::vector<GF2E> &roots) {
   return poly;
 }
 
+// normal eval precomputation
+std::vector<GF2E> eval_precompute(const GF2E &point, size_t poly_size) {
+  std::vector<GF2E> out;
+  out.reserve(poly_size);
+
+  GF2E temp = point;
+  out.push_back(temp);
+  for (size_t i = 1; i < poly_size; ++i) {
+    temp *= point;
+    out.push_back(temp);
+  }
+  return out;
+}
+
+// normal optmized polynomial evaluation with precomputation optmization
+GF2E eval_fast(const std::vector<GF2E> &poly, const std::vector<GF2E> &x_pow_n,
+               const size_t lambda) {
+  __m128i acc = _mm_set_epi64x(0, poly[0].get_data());
+  for (size_t i = 1; i < poly.size(); ++i) {
+    acc = acc ^ clmul(poly[i].get_data(), x_pow_n[i - 1].get_data());
+  }
+
+  switch (lambda) {
+  case 2:
+    return GF2E(reduce_GF2_16_clmul(acc));
+  case 4:
+    return GF2E(reduce_GF2_32_clmul(acc));
+  case 5:
+    return GF2E(reduce_GF2_40_clmul(acc));
+  case 6:
+    return GF2E(reduce_GF2_48_clmul(acc));
+  default:
+    return GF2E(reduce_GF2_32_clmul(acc));
+  }
+}
+
 // horner eval
 GF2E eval(const std::vector<GF2E> &poly, const GF2E &point) {
   GF2E acc;
@@ -874,6 +909,7 @@ std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
 }
 
 // polynomial division of x^n*c^n + x^n-1*c^n-1 + .... by x - a
+// -> Returns Quotient
 std::vector<field::GF2E> operator/(const std::vector<field::GF2E> &lhs,
                                    const field::GF2E &rhs) {
   std::vector<field::GF2E> temp(lhs);

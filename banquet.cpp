@@ -687,17 +687,30 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   std::vector<field::GF2E> lagrange_polys_evaluated_at_Re_2m2(2 * instance.m2 +
                                                               1);
 
+  size_t size_m2 = precomputation_for_zero_to_m2[0].size();
+  size_t size_2m2 = precomputation_for_zero_to_2m2[0].size();
+
   for (size_t repetition = 0; repetition < instance.num_rounds; repetition++) {
     c_shares[repetition].resize(instance.num_MPC_parties);
     a[repetition].resize(instance.m1);
     b[repetition].resize(instance.m1);
+
+    std::vector<field::GF2E> precomputed_m2_eval_x_pow_n =
+        field::eval_precompute(R_es[repetition], size_m2);
+    std::vector<field::GF2E> precomputed_2m2_eval_x_pow_n =
+        field::eval_precompute(R_es[repetition], size_2m2);
+
     for (size_t k = 0; k < instance.m2 + 1; k++) {
+
       lagrange_polys_evaluated_at_Re_m2[k] =
-          field::eval(precomputation_for_zero_to_m2[k], R_es[repetition]);
+          field::eval_fast(precomputation_for_zero_to_m2[k],
+                           precomputed_m2_eval_x_pow_n, instance.lambda);
     }
     for (size_t k = 0; k < 2 * instance.m2 + 1; k++) {
+
       lagrange_polys_evaluated_at_Re_2m2[k] =
-          field::eval(precomputation_for_zero_to_2m2[k], R_es[repetition]);
+          field::eval_fast(precomputation_for_zero_to_2m2[k],
+                           precomputed_2m2_eval_x_pow_n, instance.lambda);
     }
 
     for (size_t party = 0; party < instance.num_MPC_parties; party++) {
@@ -1111,13 +1124,24 @@ bool banquet_verify(const banquet_instance_t &instance,
     const banquet_repetition_proof_t &proof = signature.proofs[repetition];
     size_t missing_party = missing_parties[repetition];
 
+    std::vector<field::GF2E> precomputed_m2_eval_x_pow_n =
+        field::eval_precompute(R_es[repetition],
+                               precomputation_for_zero_to_m2[0].size());
+    std::vector<field::GF2E> precomputed_2m2_eval_x_pow_n =
+        field::eval_precompute(R_es[repetition],
+                               precomputation_for_zero_to_2m2[0].size());
+
     for (size_t k = 0; k < instance.m2 + 1; k++) {
+
       lagrange_polys_evaluated_at_Re_m2[k] =
-          field::eval(precomputation_for_zero_to_m2[k], R_es[repetition]);
+          field::eval_fast(precomputation_for_zero_to_m2[k],
+                           precomputed_m2_eval_x_pow_n, instance.lambda);
     }
     for (size_t k = 0; k < 2 * instance.m2 + 1; k++) {
+
       lagrange_polys_evaluated_at_Re_2m2[k] =
-          field::eval(precomputation_for_zero_to_2m2[k], R_es[repetition]);
+          field::eval_fast(precomputation_for_zero_to_2m2[k],
+                           precomputed_2m2_eval_x_pow_n, instance.lambda);
     }
 
     c_shares[repetition].resize(instance.num_MPC_parties);

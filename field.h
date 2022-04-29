@@ -20,6 +20,7 @@ field::GF2E dot_product(const std::vector<field::GF2E> &lhs,
                         const std::vector<field::GF2E> &rhs);
 
 namespace field {
+
 class GF2E {
 
   uint64_t data;
@@ -125,6 +126,10 @@ std::vector<GF2E> interpolate_with_precomputation(
     const std::vector<GF2E> &y_values);
 
 std::vector<GF2E> build_from_roots(const std::vector<GF2E> &roots);
+
+std::vector<GF2E> eval_precompute(const GF2E &point, size_t poly_size);
+GF2E eval_fast(const std::vector<GF2E> &poly, const std::vector<GF2E> &x_pow_n,
+               const size_t lambda);
 
 GF2E eval(const std::vector<GF2E> &poly, const GF2E &point);
 

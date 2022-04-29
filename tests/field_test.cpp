@@ -5,7 +5,7 @@
 #include "utils.h"
 
 #include <NTL/GF2EX.h>
-
+/*
 TEST_CASE("Basic Arithmetic in all fields", "[field]") {
   banquet_params_t params[] = {Banquet_L1_Param1, Banquet_L1_Param3,
                                Banquet_L1_Param4};
@@ -258,59 +258,6 @@ TEST_CASE("Constant time inverse == custom", "[field]") {
   REQUIRE(d.inverse_const_time() == d.inverse());
 }
 
-TEST_CASE("RANDOM TESTS") {
-
-  // field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
-  // field::GF2E a;
-  // a.set_coeff(38);
-  // a.set_coeff(31);
-
-  // field::GF2E a1 = a.sqr();
-  // field::GF2E a2 = a * a;
-
-  // uint64_t round = 10000000;
-
-  // __m128i a = _mm_set_epi64x(0x00, 0xbbbbbbbbbbbbbbbb);
-
-  // REQUIRE(field::reduce_clmul_GF2(a) == field::reduce_GF2_barret(a));
-  // REQUIRE(field::reduce_clmul_GF2(a) == field::reduce_GF2(a));
-
-  // for (uint64_t i = 0; i < 1000; ++i) {
-  //   field::reduce_clmul_GF2(a);
-  // }
-  // auto start = std::chrono::system_clock::now();
-  // for (uint64_t i = 0; i < round; ++i) {
-  //   field::reduce_clmul_GF2(a);
-  // }
-  // auto end = std::chrono::system_clock::now() - start;
-  // std::cout << "clmul - " << field::reduce_clmul_GF2(a) << " - ";
-  // std::cout << std::dec << end / std::chrono::milliseconds(1);
-  // std::cout << "ms" << std::endl;
-
-  // for (uint64_t i = 0; i < 1000; ++i) {
-  //   field::reduce_GF2_barret(a);
-  // }
-  // start = std::chrono::system_clock::now();
-  // for (uint64_t i = 0; i < round; ++i) {
-  //   field::reduce_GF2_barret(a);
-  // }
-  // end = std::chrono::system_clock::now() - start;
-  // std::cout << "barret - " << field::reduce_GF2_barret(a) << " - ";
-  // std::cout << std::dec << end / std::chrono::milliseconds(1);
-  // std::cout << "mms" << std::endl;
-
-  // for (uint64_t i = 0; i < 1000; ++i) {
-  //   field::reduce_GF2(a);
-  // }
-  // start = std::chrono::system_clock::now();
-  // for (uint64_t i = 0; i < round; ++i) {
-  //   field::reduce_GF2(a);
-  // }
-  // end = std::chrono::system_clock::now() - start;
-  // std::cout << "normal - " << field::reduce_GF2(a) << " - ";
-  // std::cout << std::dec << end / std::chrono::milliseconds(1);
-  // std::cout << "ms" << std::endl;
-}
 
 TEST_CASE("NTL interpolation == custom", "[field]") {
   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
@@ -393,4 +340,33 @@ TEST_CASE("fast interpolation == optmized custom interpolation", "[field]") {
       0, precomputed_x_minus_xi.size());
 
   REQUIRE(result_fast == result_optim);
+}
+ */
+
+TEST_CASE("RANDOM TESTS") {
+
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param4));
+  // field::GF2E a;
+  std::vector<field::GF2E> a(1);
+  a[0].set_coeff(31);
+  a[0].set_coeff(39);
+
+  std::vector<field::GF2E> roots = field::get_first_n_field_elements(3);
+  std::vector<field::GF2E> poly = field::build_from_roots(roots);
+  field::GF2E eval = field::eval(poly, a[0]);
+
+  std::vector<field::GF2E> precomp = field::eval_precompute(a[0], poly.size());
+  field::GF2E eval1 = field::eval_fast(
+      poly, precomp, banquet_instance_get(Banquet_L1_Param4).lambda);
+
+  REQUIRE(eval == eval1);
+
+  // auto start = std::chrono::system_clock::now();
+  // for (uint64_t i = 0; i < round; ++i) {
+  //   field::reduce_clmul_GF2(a);
+  // }
+  // auto end = std::chrono::system_clock::now() - start;
+  // std::cout << "clmul - " << field::reduce_clmul_GF2(a) << " - ";
+  // std::cout << std::dec << end / std::chrono::milliseconds(1);
+  // std::cout << "ms" << std::endl;
 }
