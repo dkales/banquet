@@ -796,6 +796,7 @@ std::vector<GF2E> eval_precompute(const GF2E &point, size_t poly_size) {
   out.reserve(poly_size);
 
   GF2E temp = point;
+
   out.push_back(temp);
   for (size_t i = 1; i < poly_size; ++i) {
     temp *= point;
@@ -809,6 +810,7 @@ GF2E eval_fast(const std::vector<GF2E> &poly, const std::vector<GF2E> &x_pow_n,
                const size_t lambda) {
   __m128i acc = _mm_set_epi64x(0, poly[0].get_data());
   for (size_t i = 1; i < poly.size(); ++i) {
+
     acc = acc ^ clmul(poly[i].get_data(), x_pow_n[i - 1].get_data());
   }
 
@@ -868,7 +870,7 @@ std::vector<field::GF2E> &operator+=(std::vector<field::GF2E> &lhs,
 field::GF2E dot_product(const std::vector<field::GF2E> &lhs,
                         const std::vector<field::GF2E> &rhs) {
   if (lhs.size() != rhs.size())
-    throw std::runtime_error("adding vectors of different sizes");
+    throw std::runtime_error("mul vectors of different sizes");
 
   // field::GF2E result;
   // for (size_t i = 0; i < lhs.size(); i++)
@@ -880,6 +882,66 @@ field::GF2E dot_product(const std::vector<field::GF2E> &lhs,
   field::GF2E result(field::GF2E::reduce_clmul(accum));
 
   return result;
+}
+
+// Multiplies polynomial of arbitarty degree
+std::vector<field::GF2E>
+mul_karatsuba_arbideg(const std::vector<field::GF2E> &lhs,
+                      const std::vector<field::GF2E> &rhs) {
+
+  if (lhs.size() != rhs.size())
+    throw std::runtime_error("karatsuba mul vectors of different sizes");
+
+  field::GF2E d[lhs.size()];
+  std::vector<field::GF2E> c(lhs.size() + rhs.size() - 1);
+
+  // When i == 0
+  d[0] = lhs[0] * rhs[0];
+
+  // When i == 1
+  d[1] = lhs[1] * rhs[1];
+  c[1] = ((lhs[0] + lhs[1]) * (rhs[0] + rhs[1])) - (d[1] + d[0]);
+
+  // When i == 2..poly_length
+  for (size_t i = 2; i < lhs.size(); ++i) {
+    d[i] = lhs[i] * rhs[i];
+    field::GF2E sum;
+    for (size_t t = i; t > i / 2; --t) {
+      sum +=
+          ((lhs[i - t] + lhs[t]) * (rhs[i - t] + rhs[t])) - (d[t] + d[i - t]);
+    }
+    if (i % 2 == 0) {
+      sum += d[i / 2];
+    }
+    c[i] = sum;
+  }
+
+  // When i == poly_len..poly_len*2-3
+  for (size_t i = lhs.size(); i <= lhs.size() + rhs.size() - 3; ++i) {
+    field::GF2E sum;
+    for (size_t t = lhs.size() - 1; t > i / 2; --t) {
+      sum +=
+          ((lhs[i - t] + lhs[t]) * (rhs[i - t] + rhs[t])) - (d[t] + d[i - t]);
+    }
+    if (i % 2 == 0) {
+      sum += d[i / 2];
+    }
+    c[i] = sum;
+  }
+
+  // Setting the first and the last i
+  c[0] = d[0];
+  c[lhs.size() + rhs.size() - 2] = d[lhs.size() - 1];
+
+  return c;
+}
+
+// Multiplies polynomial of 2^n - 1 degree
+std::vector<field::GF2E>
+mul_karatsuba_fixdeg(const std::vector<field::GF2E> &lhs,
+                     const std::vector<field::GF2E> &rhs) {
+
+  std::vector<field::GF2E> c(lhs.size() + rhs.size() - 1);
 }
 
 std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
@@ -904,6 +966,8 @@ std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
   for (size_t i = 0; i < lhs.size(); i++)
     for (size_t j = 0; j < rhs.size(); j++)
       result[i + j] += lhs[i] * rhs[j];
+
+  // std::vector<field::GF2E> result = mul_karatsuba_arbideg(lhs, rhs);
 
   return result;
 }

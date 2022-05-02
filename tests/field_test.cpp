@@ -343,30 +343,44 @@ TEST_CASE("fast interpolation == optmized custom interpolation", "[field]") {
 }
  */
 
-TEST_CASE("RANDOM TESTS") {
+TEST_CASE("RANDOM TEST BED") {
 
   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param4));
   // field::GF2E a;
-  std::vector<field::GF2E> a(1);
-  a[0].set_coeff(31);
-  a[0].set_coeff(39);
+  // std::vector<field::GF2E> a(1);
+  // a[0].set_coeff(31);
+  // a[0].set_coeff(39);
 
-  std::vector<field::GF2E> roots = field::get_first_n_field_elements(3);
-  std::vector<field::GF2E> poly = field::build_from_roots(roots);
-  field::GF2E eval = field::eval(poly, a[0]);
+  std::vector<field::GF2E> roots = field::get_first_n_field_elements(256);
+  std::vector<field::GF2E> poly1 = field::build_from_roots(roots);
 
-  std::vector<field::GF2E> precomp = field::eval_precompute(a[0], poly.size());
-  field::GF2E eval1 = field::eval_fast(
-      poly, precomp, banquet_instance_get(Banquet_L1_Param4).lambda);
+  std::vector<field::GF2E> poly2 = field::build_from_roots(roots);
+  for (size_t i = 0; i < poly2.size(); i++) {
+    poly2[i] += field::GF2E(1);
+  }
 
-  REQUIRE(eval == eval1);
+  std::vector<field::GF2E> result1 = poly1 * poly2;
 
-  // auto start = std::chrono::system_clock::now();
-  // for (uint64_t i = 0; i < round; ++i) {
-  //   field::reduce_clmul_GF2(a);
-  // }
-  // auto end = std::chrono::system_clock::now() - start;
-  // std::cout << "clmul - " << field::reduce_clmul_GF2(a) << " - ";
-  // std::cout << std::dec << end / std::chrono::milliseconds(1);
-  // std::cout << "ms" << std::endl;
+  std::vector<field::GF2E> result2 = mul_karatsuba_arbideg(poly1, poly2);
+
+  REQUIRE(result1 == result2);
+
+  size_t rounds = 10000;
+  auto start = std::chrono::system_clock::now();
+  for (uint64_t i = 0; i < rounds; ++i) {
+    poly1 *poly2;
+  }
+  auto end = std::chrono::system_clock::now() - start;
+  std::cout << "poly*poly - ";
+  std::cout << std::dec << end / std::chrono::milliseconds(1);
+  std::cout << "ms" << std::endl;
+
+  start = std::chrono::system_clock::now();
+  for (uint64_t i = 0; i < rounds; ++i) {
+    mul_karatsuba_arbideg(poly1, poly2);
+  }
+  end = std::chrono::system_clock::now() - start;
+  std::cout << "karat poly - ";
+  std::cout << std::dec << end / std::chrono::milliseconds(1);
+  std::cout << "ms" << std::endl;
 }
