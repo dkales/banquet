@@ -910,9 +910,8 @@ mul_karatsuba_arbideg(const std::vector<field::GF2E> &lhs,
       sum +=
           ((lhs[i - t] + lhs[t]) * (rhs[i - t] + rhs[t])) - (d[t] + d[i - t]);
     }
-    if (i % 2 == 0) {
-      sum += d[i / 2];
-    }
+    // If i is even
+    sum += d[i / 2] * ((i + 1) % 2);
     c[i] = sum;
   }
 
@@ -923,9 +922,9 @@ mul_karatsuba_arbideg(const std::vector<field::GF2E> &lhs,
       sum +=
           ((lhs[i - t] + lhs[t]) * (rhs[i - t] + rhs[t])) - (d[t] + d[i - t]);
     }
-    if (i % 2 == 0) {
-      sum += d[i / 2];
-    }
+
+    // If i is even
+    sum += d[i / 2] * ((i + 1) % 2);
     c[i] = sum;
   }
 
@@ -936,12 +935,97 @@ mul_karatsuba_arbideg(const std::vector<field::GF2E> &lhs,
   return c;
 }
 
-// Multiplies polynomial of 2^n - 1 degree
+// Adding dummy values to make the coeff size a power of 2
+void mul_karatsuba_fixdeg_precondition_poly(std::vector<field::GF2E> &lhs,
+                                            std::vector<field::GF2E> &rhs) {
+
+  // Computes the next power of 2 for a 32 bit number
+  // This represents the no. of coeffs
+  size_t next_2_pow = lhs.size();
+  next_2_pow--;
+  next_2_pow |= next_2_pow >> 1;
+  next_2_pow |= next_2_pow >> 2;
+  next_2_pow |= next_2_pow >> 4;
+  next_2_pow |= next_2_pow >> 8;
+  next_2_pow |= next_2_pow >> 16;
+  next_2_pow++;
+
+  size_t old_lhs_size = lhs.size();
+  lhs.resize(next_2_pow);
+  rhs.resize(next_2_pow);
+  // Putting the dummy terms in the begining to make the polys 2^n - 1 degree ->
+  // 2^n coeff
+  for (size_t i = old_lhs_size; i < next_2_pow; ++i) {
+    lhs[i] = field::GF2E(0);
+    rhs[i] = field::GF2E(0);
+  }
+}
+
+// Adding dummy values to make the coeff size a power of 2
+void mul_karatsuba_fixdeg_normalize_poly(std::vector<field::GF2E> &poly,
+                                         size_t old_size) {
+  poly.resize(old_size * 2 - 1);
+}
+
+// Multiplies polynomial of 2^n - 1 degree -> 2^n coeff
 std::vector<field::GF2E>
 mul_karatsuba_fixdeg(const std::vector<field::GF2E> &lhs,
                      const std::vector<field::GF2E> &rhs) {
 
-  std::vector<field::GF2E> c(lhs.size() + rhs.size() - 1);
+  if (lhs.size() != rhs.size())
+    throw std::runtime_error("karatsuba mul vectors of different sizes");
+
+  // If a polynomial with degree 0 -> const 1
+  if (lhs.size() == 1) {
+    return std::vector<field::GF2E>(1, lhs[0] * rhs[0]);
+  }
+
+  size_t half_size = lhs.size() / 2;
+  size_t full_size = lhs.size();
+
+  std::vector<field::GF2E> lhs_u, rhs_u, lhs_l, rhs_l;
+  lhs_u.reserve(half_size);
+  rhs_u.reserve(half_size);
+  lhs_l.reserve(half_size);
+  rhs_l.reserve(half_size);
+
+  // Getting the lower of lhs and rhs
+  for (size_t i = 0; i < half_size; ++i) {
+    lhs_l.push_back(lhs[i]);
+    rhs_l.push_back(rhs[i]);
+  }
+
+  // Getting the upper of lhs and rhs
+  for (size_t i = half_size; i < full_size; ++i) {
+    lhs_u.push_back(lhs[i]);
+    rhs_u.push_back(rhs[i]);
+  }
+
+  std::vector<field::GF2E> d_0 = mul_karatsuba_fixdeg(lhs_l, rhs_l);
+  std::vector<field::GF2E> d_1 = mul_karatsuba_fixdeg(lhs_u, rhs_u);
+  std::vector<field::GF2E> d_01 =
+      mul_karatsuba_fixdeg(lhs_l + lhs_u, rhs_l + rhs_u);
+
+  std::vector<field::GF2E> c(d_1.size() + lhs.size());
+
+  // D_1*x^n + (D_01 - D_0 - D_1)*x^(n/2) + d_0
+  size_t cidx = d_1.size() + lhs.size();
+  for (size_t i = d_1.size(); i; --i) {
+    c[cidx - 1] += d_1[i - 1];
+    cidx--;
+  }
+  cidx = c.size() * 3 / 4;
+  for (size_t i = d_0.size(); i; --i) {
+    c[cidx - 1] += (d_01[i - 1] - d_0[i - 1] - d_1[i - 1]);
+    cidx--;
+  }
+  cidx = c.size() / 2;
+  for (size_t i = d_0.size(); i; --i) {
+    c[cidx - 1] += d_0[i - 1];
+    cidx--;
+  }
+
+  return c;
 }
 
 std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
@@ -966,10 +1050,9 @@ std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,
   for (size_t i = 0; i < lhs.size(); i++)
     for (size_t j = 0; j < rhs.size(); j++)
       result[i + j] += lhs[i] * rhs[j];
-
-  // std::vector<field::GF2E> result = mul_karatsuba_arbideg(lhs, rhs);
-
   return result;
+
+  // return mul_karatsuba_arbideg(lhs, rhs);
 }
 
 // polynomial division of x^n*c^n + x^n-1*c^n-1 + .... by x - a
