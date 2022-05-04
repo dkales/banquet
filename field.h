@@ -31,7 +31,8 @@ void mul_karatsuba_fixdeg_normalize_poly(std::vector<field::GF2E> &poly,
 
 std::vector<field::GF2E>
 mul_karatsuba_fixdeg(const std::vector<field::GF2E> &lhs,
-                     const std::vector<field::GF2E> &rhs);
+                     const std::vector<field::GF2E> &rhs, const size_t start,
+                     const size_t end);
 
 namespace field {
 

@@ -950,76 +950,89 @@ void mul_karatsuba_fixdeg_precondition_poly(std::vector<field::GF2E> &lhs,
   next_2_pow |= next_2_pow >> 16;
   next_2_pow++;
 
-  size_t old_lhs_size = lhs.size();
-  lhs.resize(next_2_pow);
-  rhs.resize(next_2_pow);
   // Putting the dummy terms in the begining to make the polys 2^n - 1 degree ->
   // 2^n coeff
-  for (size_t i = old_lhs_size; i < next_2_pow; ++i) {
-    lhs[i] = field::GF2E(0);
-    rhs[i] = field::GF2E(0);
-  }
+  lhs.resize(next_2_pow, field::GF2E(0));
+  rhs.resize(next_2_pow, field::GF2E(0));
 }
 
 // Adding dummy values to make the coeff size a power of 2
 void mul_karatsuba_fixdeg_normalize_poly(std::vector<field::GF2E> &poly,
                                          size_t old_size) {
-  poly.resize(old_size * 2 - 1);
+  poly.resize((old_size << 1) - 1);
 }
 
 // Multiplies polynomial of 2^n - 1 degree -> 2^n coeff
 std::vector<field::GF2E>
 mul_karatsuba_fixdeg(const std::vector<field::GF2E> &lhs,
-                     const std::vector<field::GF2E> &rhs) {
+                     const std::vector<field::GF2E> &rhs,
+                     const size_t start_idx, const size_t end_idx) {
 
-  if (lhs.size() != rhs.size())
-    throw std::runtime_error("karatsuba mul vectors of different sizes");
+  size_t full_size = ((end_idx - start_idx) + 1);
+  size_t half_size = full_size / 2;
 
-  // If a polynomial with degree 0 -> const 1
-  if (lhs.size() == 1) {
-    return std::vector<field::GF2E>(1, lhs[0] * rhs[0]);
+  std::cout << "full size " << full_size << std::endl;
+
+  // If a polynomial with degree 0 -> const
+  if (full_size == 1) {
+    std::cout << "ret" << std::endl;
+    return std::vector<field::GF2E>(1, lhs[start_idx] * rhs[start_idx]);
   }
 
-  size_t half_size = lhs.size() / 2;
-  size_t full_size = lhs.size();
+  // std::cout << "111" << std::endl;
 
-  std::vector<field::GF2E> lhs_u, rhs_u, lhs_l, rhs_l;
-  lhs_u.reserve(half_size);
-  rhs_u.reserve(half_size);
-  lhs_l.reserve(half_size);
-  rhs_l.reserve(half_size);
+  std::vector<field::GF2E> d_0 =
+      mul_karatsuba_fixdeg(lhs, rhs, start_idx, (start_idx + half_size) - 1);
+  // std::cout << "222" << std::endl;
 
+  std::cout << "d1 start " << std::endl;
+  std::cout << "start_idx end_idx " << (start_idx + half_size) << " " << end_idx
+            << std::endl;
+  std::vector<field::GF2E> d_1 =
+      mul_karatsuba_fixdeg(lhs, rhs, (start_idx + half_size), end_idx);
+  std::cout << "d1 ends " << std::endl;
+  // std::cout << "333" << std::endl;
+
+  std::vector<field::GF2E> lhs_l_add_u, rhs_l_add_u;
+  lhs_l_add_u.reserve(half_size);
+  rhs_l_add_u.reserve(half_size);
   // Getting the lower of lhs and rhs
   for (size_t i = 0; i < half_size; ++i) {
-    lhs_l.push_back(lhs[i]);
-    rhs_l.push_back(rhs[i]);
+    lhs_l_add_u.push_back(lhs[start_idx + i] + lhs[((end_idx / 2) + 1) + i]);
+    rhs_l_add_u.push_back(rhs[start_idx + i] + rhs[((end_idx / 2) + 1) + i]);
   }
 
-  // Getting the upper of lhs and rhs
-  for (size_t i = half_size; i < full_size; ++i) {
-    lhs_u.push_back(lhs[i]);
-    rhs_u.push_back(rhs[i]);
-  }
-
-  std::vector<field::GF2E> d_0 = mul_karatsuba_fixdeg(lhs_l, rhs_l);
-  std::vector<field::GF2E> d_1 = mul_karatsuba_fixdeg(lhs_u, rhs_u);
   std::vector<field::GF2E> d_01 =
-      mul_karatsuba_fixdeg(lhs_l + lhs_u, rhs_l + rhs_u);
+      mul_karatsuba_fixdeg(lhs_l_add_u, rhs_l_add_u, 0, half_size - 1);
+  // std::cout << "444" << std::endl;
 
-  std::vector<field::GF2E> c(d_1.size() + lhs.size());
+  std::cout << "d_0" << std::endl;
+  for (size_t i = 0; i < d_0.size(); i++) {
+    std::cout << d_0[i] << std::endl;
+  }
+  std::cout << "d_01" << std::endl;
+  for (size_t i = 0; i < d_01.size(); i++) {
+    std::cout << d_01[i] << std::endl;
+  }
+  std::cout << "d_1" << std::endl;
+  for (size_t i = 0; i < d_1.size(); i++) {
+    std::cout << d_1[i] << std::endl;
+  }
+
+  std::vector<field::GF2E> c(d_1.size() + full_size);
 
   // D_1*x^n + (D_01 - D_0 - D_1)*x^(n/2) + d_0
-  size_t cidx = d_1.size() + lhs.size();
+  size_t cidx = c.size();
   for (size_t i = d_1.size(); i; --i) {
     c[cidx - 1] += d_1[i - 1];
     cidx--;
   }
-  cidx = c.size() * 3 / 4;
+  cidx = (c.size() * 3 / 4);
   for (size_t i = d_0.size(); i; --i) {
     c[cidx - 1] += (d_01[i - 1] - d_0[i - 1] - d_1[i - 1]);
     cidx--;
   }
-  cidx = c.size() / 2;
+  cidx = (c.size() / 2);
   for (size_t i = d_0.size(); i; --i) {
     c[cidx - 1] += d_0[i - 1];
     cidx--;
