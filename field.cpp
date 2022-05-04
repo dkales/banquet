@@ -971,27 +971,16 @@ mul_karatsuba_fixdeg(const std::vector<field::GF2E> &lhs,
   size_t full_size = ((end_idx - start_idx) + 1);
   size_t half_size = full_size / 2;
 
-  std::cout << "full size " << full_size << std::endl;
-
   // If a polynomial with degree 0 -> const
   if (full_size == 1) {
-    std::cout << "ret" << std::endl;
     return std::vector<field::GF2E>(1, lhs[start_idx] * rhs[start_idx]);
   }
 
-  // std::cout << "111" << std::endl;
-
   std::vector<field::GF2E> d_0 =
       mul_karatsuba_fixdeg(lhs, rhs, start_idx, (start_idx + half_size) - 1);
-  // std::cout << "222" << std::endl;
 
-  std::cout << "d1 start " << std::endl;
-  std::cout << "start_idx end_idx " << (start_idx + half_size) << " " << end_idx
-            << std::endl;
   std::vector<field::GF2E> d_1 =
       mul_karatsuba_fixdeg(lhs, rhs, (start_idx + half_size), end_idx);
-  std::cout << "d1 ends " << std::endl;
-  // std::cout << "333" << std::endl;
 
   std::vector<field::GF2E> lhs_l_add_u, rhs_l_add_u;
   lhs_l_add_u.reserve(half_size);
@@ -1004,7 +993,8 @@ mul_karatsuba_fixdeg(const std::vector<field::GF2E> &lhs,
 
   std::vector<field::GF2E> d_01 =
       mul_karatsuba_fixdeg(lhs_l_add_u, rhs_l_add_u, 0, half_size - 1);
-  // std::cout << "444" << std::endl;
+
+  std::vector<field::GF2E> c(d_1.size() + full_size);
 
   std::cout << "d_0" << std::endl;
   for (size_t i = 0; i < d_0.size(); i++) {
@@ -1018,8 +1008,6 @@ mul_karatsuba_fixdeg(const std::vector<field::GF2E> &lhs,
   for (size_t i = 0; i < d_1.size(); i++) {
     std::cout << d_1[i] << std::endl;
   }
-
-  std::vector<field::GF2E> c(d_1.size() + full_size);
 
   // D_1*x^n + (D_01 - D_0 - D_1)*x^(n/2) + d_0
   size_t cidx = c.size();

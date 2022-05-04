@@ -374,7 +374,7 @@ TEST_CASE("RANDOM TEST BED") {
   // a[0].set_coeff(31);
   // a[0].set_coeff(39);
 
-  std::vector<field::GF2E> roots = field::get_first_n_field_elements(4);
+  std::vector<field::GF2E> roots = field::get_first_n_field_elements(3);
   std::vector<field::GF2E> poly1 = field::build_from_roots(roots);
 
   std::vector<field::GF2E> poly2 = field::build_from_roots(roots);
