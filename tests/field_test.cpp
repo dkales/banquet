@@ -374,7 +374,7 @@ TEST_CASE("RANDOM TEST BED") {
   // a[0].set_coeff(31);
   // a[0].set_coeff(39);
 
-  std::vector<field::GF2E> roots = field::get_first_n_field_elements(3);
+  std::vector<field::GF2E> roots = field::get_first_n_field_elements(131072);
   std::vector<field::GF2E> poly1 = field::build_from_roots(roots);
 
   std::vector<field::GF2E> poly2 = field::build_from_roots(roots);
@@ -382,46 +382,43 @@ TEST_CASE("RANDOM TEST BED") {
     poly2[i] += field::GF2E(1);
   }
 
-  std::vector<field::GF2E> result1 = poly1 * poly1;
+  // std::vector<field::GF2E> result1 = poly1 * poly2;
+  // size_t old_poly1_size = poly1.size();
+  // mul_karatsuba_fixdeg_precondition_poly(poly1, poly2);
+  // std::vector<field::GF2E> result2 =
+  //     mul_karatsuba_fixdeg(poly1, poly2, 0, poly1.size() - 1);
+  // mul_karatsuba_fixdeg_normalize_poly(result2, old_poly1_size);
+  // REQUIRE(result1 == result2);
 
-  size_t old_poly1_size = poly1.size();
-  mul_karatsuba_fixdeg_precondition_poly(poly1, poly1);
+  size_t rounds = 1;
+  auto start = std::chrono::system_clock::now();
+  for (uint64_t i = 0; i < rounds; ++i) {
+    poly1 *poly2;
+  }
+  auto end = std::chrono::system_clock::now() - start;
+  std::cout << "poly*poly - ";
+  std::cout << std::dec << end / std::chrono::milliseconds(1);
+  std::cout << "ms" << std::endl;
 
-  std::vector<field::GF2E> result2 =
-      mul_karatsuba_fixdeg(poly1, poly1, 0, poly1.size() - 1);
-  mul_karatsuba_fixdeg_normalize_poly(result2, old_poly1_size);
+  start = std::chrono::system_clock::now();
+  for (uint64_t i = 0; i < rounds; ++i) {
+    mul_karatsuba_arbideg(poly1, poly2);
+  }
+  end = std::chrono::system_clock::now() - start;
+  std::cout << "karat poly - ";
+  std::cout << std::dec << end / std::chrono::milliseconds(1);
+  std::cout << "ms" << std::endl;
 
-  REQUIRE(result1 == result2);
-
-  // size_t rounds = 100;
-  // auto start = std::chrono::system_clock::now();
-  // for (uint64_t i = 0; i < rounds; ++i) {
-  //   poly1 *poly2;
-  // }
-  // auto end = std::chrono::system_clock::now() - start;
-  // std::cout << "poly*poly - ";
-  // std::cout << std::dec << end / std::chrono::milliseconds(1);
-  // std::cout << "ms" << std::endl;
-
-  // start = std::chrono::system_clock::now();
-  // for (uint64_t i = 0; i < rounds; ++i) {
-  //   mul_karatsuba_arbideg(poly1, poly2);
-  // }
-  // end = std::chrono::system_clock::now() - start;
-  // std::cout << "karat poly - ";
-  // std::cout << std::dec << end / std::chrono::milliseconds(1);
-  // std::cout << "ms" << std::endl;
-
-  // start = std::chrono::system_clock::now();
-  // for (uint64_t i = 0; i < rounds; ++i) {
-  //   size_t old_poly1_size = poly1.size();
-  //   mul_karatsuba_fixdeg_precondition_poly(poly1, poly2);
-  //   std::vector<field::GF2E> result2 =
-  //       mul_karatsuba_fixdeg(poly1, poly2, 0, poly1.size() - 1);
-  //   mul_karatsuba_fixdeg_normalize_poly(result2, old_poly1_size);
-  // }
-  // end = std::chrono::system_clock::now() - start;
-  // std::cout << "karat 2pown-1 poly - ";
-  // std::cout << std::dec << end / std::chrono::milliseconds(1);
-  // std::cout << "ms" << std::endl;
+  start = std::chrono::system_clock::now();
+  for (uint64_t i = 0; i < rounds; ++i) {
+    size_t old_poly1_size = poly1.size();
+    mul_karatsuba_fixdeg_precondition_poly(poly1, poly2);
+    std::vector<field::GF2E> result2 =
+        mul_karatsuba_fixdeg(poly1, poly2, 0, poly1.size() - 1);
+    mul_karatsuba_fixdeg_normalize_poly(result2, old_poly1_size);
+  }
+  end = std::chrono::system_clock::now() - start;
+  std::cout << "karat 2pown-1 poly - ";
+  std::cout << std::dec << end / std::chrono::milliseconds(1);
+  std::cout << "ms" << std::endl;
 }

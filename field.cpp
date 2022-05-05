@@ -978,7 +978,6 @@ mul_karatsuba_fixdeg(const std::vector<field::GF2E> &lhs,
 
   std::vector<field::GF2E> d_0 =
       mul_karatsuba_fixdeg(lhs, rhs, start_idx, (start_idx + half_size) - 1);
-
   std::vector<field::GF2E> d_1 =
       mul_karatsuba_fixdeg(lhs, rhs, (start_idx + half_size), end_idx);
 
@@ -986,36 +985,21 @@ mul_karatsuba_fixdeg(const std::vector<field::GF2E> &lhs,
   lhs_l_add_u.reserve(half_size);
   rhs_l_add_u.reserve(half_size);
   // Getting the lower of lhs and rhs
-  for (size_t i = 0; i < half_size; ++i) {
-    lhs_l_add_u.push_back(lhs[start_idx + i] + lhs[((end_idx / 2) + 1) + i]);
-    rhs_l_add_u.push_back(rhs[start_idx + i] + rhs[((end_idx / 2) + 1) + i]);
+  for (size_t i = start_idx; i < start_idx + half_size; ++i) {
+    lhs_l_add_u.push_back(lhs[i] + lhs[half_size + i]);
+    rhs_l_add_u.push_back(rhs[i] + rhs[half_size + i]);
   }
-
   std::vector<field::GF2E> d_01 =
       mul_karatsuba_fixdeg(lhs_l_add_u, rhs_l_add_u, 0, half_size - 1);
 
   std::vector<field::GF2E> c(d_1.size() + full_size);
-
-  std::cout << "d_0" << std::endl;
-  for (size_t i = 0; i < d_0.size(); i++) {
-    std::cout << d_0[i] << std::endl;
-  }
-  std::cout << "d_01" << std::endl;
-  for (size_t i = 0; i < d_01.size(); i++) {
-    std::cout << d_01[i] << std::endl;
-  }
-  std::cout << "d_1" << std::endl;
-  for (size_t i = 0; i < d_1.size(); i++) {
-    std::cout << d_1[i] << std::endl;
-  }
-
   // D_1*x^n + (D_01 - D_0 - D_1)*x^(n/2) + d_0
   size_t cidx = c.size();
   for (size_t i = d_1.size(); i; --i) {
     c[cidx - 1] += d_1[i - 1];
     cidx--;
   }
-  cidx = (c.size() * 3 / 4);
+  cidx = c.size() * 3 / 4;
   for (size_t i = d_0.size(); i; --i) {
     c[cidx - 1] += (d_01[i - 1] - d_0[i - 1] - d_1[i - 1]);
     cidx--;
