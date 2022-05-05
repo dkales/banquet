@@ -32,6 +32,29 @@ inline __m128i clmul(uint64_t a, uint64_t b) {
   return _mm_clmulepi64_si128(_mm_set_epi64x(0, a), _mm_set_epi64x(0, b), 0);
 }
 
+// actually this is slower than the above two :(
+uint64_t reduce_GF2_16_clmul(const __m128i in) {
+  // modulus = x^16 + x^5 + x^3 + x + 1
+  __m128i p = _mm_set_epi64x(0x0, 0x2B);
+  __m128i mask = _mm_set_epi64x(0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFF0000);
+  __m128i t;
+
+  __m128i hi = _mm_srli_si128(in, 2); // extracting the in_hi
+  __m128i low =
+      _mm_xor_si128(_mm_or_si128(in, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // in_hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 4 + 16 -> Length after xor
+
+  hi = _mm_srli_si128(t, 2);                        // extracting the t_hi
+  low = _mm_xor_si128(_mm_or_si128(t, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // t_hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 16 -> Length after xor
+
+  return _mm_extract_epi64(t, 0);
+}
+
 uint64_t reduce_GF2_16(__m128i in) {
   // modulus = x^16 + x^5 + x^3 + x + 1
   constexpr uint64_t lower_mask = 0xFFFFULL;
@@ -45,6 +68,28 @@ uint64_t reduce_GF2_16(__m128i in) {
   return lower_mask & R_lower;
 }
 
+// actually this is slower than the above two :(
+uint64_t reduce_GF2_32_clmul(const __m128i in) {
+  // modulus = x^32 + x^7 + x^3 + x^2 + 1
+  __m128i p = _mm_set_epi64x(0x0, 0x8d);
+  __m128i mask = _mm_set_epi64x(0xFFFFFFFFFFFFFFFF, 0xFFFFFFFF00000000);
+  __m128i t;
+
+  __m128i hi = _mm_srli_si128(in, 4); // extracting the in_hi
+  __m128i low =
+      _mm_xor_si128(_mm_or_si128(in, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // in_hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 4 + 32 -> Length after xor
+
+  hi = _mm_srli_si128(t, 4);                        // extracting the t_hi
+  low = _mm_xor_si128(_mm_or_si128(t, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // t_hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 16 -> Length after xor
+
+  return _mm_extract_epi64(t, 0);
+}
 // actually a bit slowerthan naive version below
 __attribute__((unused)) uint64_t reduce_GF2_32_barret(__m128i in) {
   // modulus = x^32 + x^7 + x^3 + x^2 + 1
@@ -69,6 +114,28 @@ uint64_t reduce_GF2_32(__m128i in) {
   return lower_mask & R_lower;
 }
 
+uint64_t reduce_GF2_40_clmul(const __m128i in) {
+  // modulus = x^40 + x^5 + x^4 + x^3 + 1
+  __m128i p = _mm_set_epi64x(0x0, 0x39);
+  __m128i mask = _mm_set_epi64x(0xFFFFFFFFFFFFFFFF, 0xFFFFFF0000000000);
+  __m128i t;
+
+  __m128i hi = _mm_srli_si128(in, 5); // extracting the hi
+  __m128i low =
+      _mm_xor_si128(_mm_or_si128(in, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 4 + 40 -> Length after xor
+
+  hi = _mm_srli_si128(t, 5);                        // extracting the hi
+  low = _mm_xor_si128(_mm_or_si128(t, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 40 -> Length after xor
+
+  return _mm_extract_epi64(t, 0);
+}
+
 uint64_t reduce_GF2_40(__m128i in) {
   // modulus = x^40 + x^5 + x^4 + x^3 + 1
   constexpr uint64_t upper_mask = 0xFFFFULL;
@@ -82,6 +149,29 @@ uint64_t reduce_GF2_40(__m128i in) {
   R_lower = R_lower ^ (R_upper << 5) ^ (R_upper << 4) ^ (R_upper << 3) ^
             (R_upper << 0);
   return lower_mask & R_lower;
+}
+
+// actually this is slower than the above two :(
+uint64_t reduce_GF2_48_clmul(const __m128i in) {
+  // modulus = x^48 + x^5 + x^3 + x^2 + 1
+  __m128i p = _mm_set_epi64x(0x0, 0x2d);
+  __m128i mask = _mm_set_epi64x(0xFFFFFFFFFFFFFFFF, 0xFFFF000000000000);
+  __m128i t;
+
+  __m128i hi = _mm_srli_si128(in, 6); // extracting the hi
+  __m128i low =
+      _mm_xor_si128(_mm_or_si128(in, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 4 + 48 -> Length after xor
+
+  hi = _mm_srli_si128(t, 6);                        // extracting the hi
+  low = _mm_xor_si128(_mm_or_si128(t, mask), mask); // extracting the low
+
+  t = _mm_clmulepi64_si128(hi, p, 0x00); // hi_low(0x00) * p
+  t = _mm_xor_si128(t, low);             // 48 -> Length after xor
+
+  return _mm_extract_epi64(t, 0);
 }
 
 uint64_t reduce_GF2_48(__m128i in) {
@@ -178,6 +268,8 @@ std::vector<uint8_t> GF2E::to_bytes() const {
   this->to_bytes(buffer.data());
   return buffer;
 }
+
+uint64_t GF2E::get_data() const { return this->data; }
 
 void GF2E::from_bytes(uint8_t *in) {
   data = 0;
@@ -384,6 +476,41 @@ std::vector<GF2E> build_from_roots(const std::vector<GF2E> &roots) {
   }
   poly[len] = GF2E(1);
   return poly;
+}
+// normal eval precomputation
+std::vector<GF2E> eval_precompute(const GF2E &point, size_t poly_size) {
+  std::vector<GF2E> out;
+  out.reserve(poly_size);
+
+  GF2E temp = point;
+  out.push_back(temp);
+  for (size_t i = 1; i < poly_size; ++i) {
+    temp *= point;
+    out.push_back(temp);
+  }
+  return out;
+}
+
+// normal optmized polynomial evaluation with precomputation optmization
+GF2E eval_fast(const std::vector<GF2E> &poly, const std::vector<GF2E> &x_pow_n,
+               const size_t lambda) {
+  __m128i acc = _mm_set_epi64x(0, poly[0].get_data());
+  for (size_t i = 1; i < poly.size(); ++i) {
+    acc = acc ^ clmul(poly[i].get_data(), x_pow_n[i - 1].get_data());
+  }
+
+  switch (lambda) {
+  case 2:
+    return GF2E(reduce_GF2_16_clmul(acc));
+  case 4:
+    return GF2E(reduce_GF2_32_clmul(acc));
+  case 5:
+    return GF2E(reduce_GF2_40_clmul(acc));
+  case 6:
+    return GF2E(reduce_GF2_48_clmul(acc));
+  default:
+    return GF2E(reduce_GF2_32_clmul(acc));
+  }
 }
 // horner eval
 GF2E eval(const std::vector<GF2E> &poly, const GF2E &point) {
