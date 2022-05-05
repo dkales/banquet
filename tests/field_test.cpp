@@ -5,7 +5,7 @@
 #include "utils.h"
 
 #include <NTL/GF2EX.h>
-/*
+
 TEST_CASE("Basic Arithmetic in all fields", "[field]") {
   banquet_params_t params[] = {Banquet_L1_Param1, Banquet_L1_Param3,
                                Banquet_L1_Param4};
@@ -258,7 +258,6 @@ TEST_CASE("Constant time inverse == custom", "[field]") {
   REQUIRE(d.inverse_const_time() == d.inverse());
 }
 
-
 TEST_CASE("NTL interpolation == custom", "[field]") {
   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
   utils::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
@@ -342,9 +341,9 @@ TEST_CASE("fast interpolation == optmized custom interpolation", "[field]") {
   REQUIRE(result_fast == result_optim);
 }
 
-
 TEST_CASE("Karatsuba Arbitary Degree Fast Polynomial Multiplication == Naive "
-          "Polynomial Multiplication", "[field]") {
+          "Polynomial Multiplication",
+          "[field]") {
   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param4));
 
   // Getting first poly
@@ -364,23 +363,46 @@ TEST_CASE("Karatsuba Arbitary Degree Fast Polynomial Multiplication == Naive "
   REQUIRE(naive_mul == fast_karat_mul);
 }
 
-*/
-
-TEST_CASE("RANDOM TEST BED") {
-
+TEST_CASE("Karatsuba Pow 2 - 1 Degree Fast Polynomial Multiplication == Naive "
+          "Polynomial Multiplication",
+          "[field]") {
   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param4));
-  // field::GF2E a;
-  // std::vector<field::GF2E> a(1);
-  // a[0].set_coeff(31);
-  // a[0].set_coeff(39);
 
-  std::vector<field::GF2E> roots = field::get_first_n_field_elements(131072);
+  // Getting first poly
+  std::vector<field::GF2E> roots = field::get_first_n_field_elements(21);
   std::vector<field::GF2E> poly1 = field::build_from_roots(roots);
 
+  // Getting a different poly
   std::vector<field::GF2E> poly2 = field::build_from_roots(roots);
   for (size_t i = 0; i < poly2.size(); i++) {
     poly2[i] += field::GF2E(1);
   }
+
+  std::vector<field::GF2E> naive_mul = poly1 * poly2;
+  size_t old_poly1_size = poly1.size();
+  mul_karatsuba_fixdeg_precondition_poly(poly1, poly2);
+  std::vector<field::GF2E> fast_karat_mul =
+      mul_karatsuba_fixdeg(poly1, poly2, 0, poly1.size() - 1);
+  mul_karatsuba_fixdeg_normalize_poly(fast_karat_mul, old_poly1_size);
+
+  REQUIRE(naive_mul == fast_karat_mul);
+}
+
+TEST_CASE("RANDOM TEST BED") {
+
+  // field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param4));
+  // // field::GF2E a;
+  // // std::vector<field::GF2E> a(1);
+  // // a[0].set_coeff(31);
+  // // a[0].set_coeff(39);
+
+  // std::vector<field::GF2E> roots = field::get_first_n_field_elements(131072);
+  // std::vector<field::GF2E> poly1 = field::build_from_roots(roots);
+
+  // std::vector<field::GF2E> poly2 = field::build_from_roots(roots);
+  // for (size_t i = 0; i < poly2.size(); i++) {
+  //   poly2[i] += field::GF2E(1);
+  // }
 
   // std::vector<field::GF2E> result1 = poly1 * poly2;
   // size_t old_poly1_size = poly1.size();
@@ -390,35 +412,35 @@ TEST_CASE("RANDOM TEST BED") {
   // mul_karatsuba_fixdeg_normalize_poly(result2, old_poly1_size);
   // REQUIRE(result1 == result2);
 
-  size_t rounds = 1;
-  auto start = std::chrono::system_clock::now();
-  for (uint64_t i = 0; i < rounds; ++i) {
-    poly1 *poly2;
-  }
-  auto end = std::chrono::system_clock::now() - start;
-  std::cout << "poly*poly - ";
-  std::cout << std::dec << end / std::chrono::milliseconds(1);
-  std::cout << "ms" << std::endl;
+  // size_t rounds = 1;
+  // auto start = std::chrono::system_clock::now();
+  // for (uint64_t i = 0; i < rounds; ++i) {
+  //   poly1 *poly2;
+  // }
+  // auto end = std::chrono::system_clock::now() - start;
+  // std::cout << "poly*poly - ";
+  // std::cout << std::dec << end / std::chrono::milliseconds(1);
+  // std::cout << "ms" << std::endl;
 
-  start = std::chrono::system_clock::now();
-  for (uint64_t i = 0; i < rounds; ++i) {
-    mul_karatsuba_arbideg(poly1, poly2);
-  }
-  end = std::chrono::system_clock::now() - start;
-  std::cout << "karat poly - ";
-  std::cout << std::dec << end / std::chrono::milliseconds(1);
-  std::cout << "ms" << std::endl;
+  // start = std::chrono::system_clock::now();
+  // for (uint64_t i = 0; i < rounds; ++i) {
+  //   mul_karatsuba_arbideg(poly1, poly2);
+  // }
+  // end = std::chrono::system_clock::now() - start;
+  // std::cout << "karat poly - ";
+  // std::cout << std::dec << end / std::chrono::milliseconds(1);
+  // std::cout << "ms" << std::endl;
 
-  start = std::chrono::system_clock::now();
-  for (uint64_t i = 0; i < rounds; ++i) {
-    size_t old_poly1_size = poly1.size();
-    mul_karatsuba_fixdeg_precondition_poly(poly1, poly2);
-    std::vector<field::GF2E> result2 =
-        mul_karatsuba_fixdeg(poly1, poly2, 0, poly1.size() - 1);
-    mul_karatsuba_fixdeg_normalize_poly(result2, old_poly1_size);
-  }
-  end = std::chrono::system_clock::now() - start;
-  std::cout << "karat 2pown-1 poly - ";
-  std::cout << std::dec << end / std::chrono::milliseconds(1);
-  std::cout << "ms" << std::endl;
+  // start = std::chrono::system_clock::now();
+  // for (uint64_t i = 0; i < rounds; ++i) {
+  //   size_t old_poly1_size = poly1.size();
+  //   mul_karatsuba_fixdeg_precondition_poly(poly1, poly2);
+  //   std::vector<field::GF2E> result2 =
+  //       mul_karatsuba_fixdeg(poly1, poly2, 0, poly1.size() - 1);
+  //   mul_karatsuba_fixdeg_normalize_poly(result2, old_poly1_size);
+  // }
+  // end = std::chrono::system_clock::now() - start;
+  // std::cout << "karat 2pown-1 poly - ";
+  // std::cout << std::dec << end / std::chrono::milliseconds(1);
+  // std::cout << "ms" << std::endl;
 }
