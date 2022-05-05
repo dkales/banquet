@@ -67,7 +67,9 @@ TEST_CASE("Modular Arithmetic GF(2^32)", "[field]") {
   field::GF2E b_2(234130046);
   REQUIRE(a * b == ab);
   REQUIRE(a * a == a_2);
+  REQUIRE(a.sqr() == a_2);
   REQUIRE(b * b == b_2);
+  REQUIRE(b.sqr() == b_2);
 }
 
 TEST_CASE("Modular Arithmetic GF(2^40)", "[field]") {
@@ -79,6 +81,7 @@ TEST_CASE("Modular Arithmetic GF(2^40)", "[field]") {
   field::GF2E b_2(153370336291ULL);
   REQUIRE(a * b == ab);
   REQUIRE(a * a == a_2);
+  REQUIRE(a.sqr() == a_2);
   REQUIRE(b * b == b_2);
 }
 
@@ -91,6 +94,7 @@ TEST_CASE("Modular Arithmetic GF(2^48)", "[field]") {
   field::GF2E b_2(119412372920018ULL);
   REQUIRE(a * b == ab);
   REQUIRE(a * a == a_2);
+  REQUIRE(a.sqr() == a_2);
   REQUIRE(b * b == b_2);
 }
 
@@ -229,15 +233,32 @@ TEST_CASE("NTL inverse == custom", "[field]") {
 
     field::GF2E b = a.inverse();
     field::GF2E c = utils::ntl_to_custom(inv(utils::custom_to_ntl(a)));
-    std::cout << utils::custom_to_ntl(a) << ", " << utils::custom_to_ntl(b)
-              << ", " << utils::custom_to_ntl(c) << "\n";
-    std::cout << utils::custom_to_ntl(a * b) << ", "
-              << utils::custom_to_ntl(a * c) << ", "
-              << utils::custom_to_ntl(a) * utils::custom_to_ntl(c) << "\n";
     REQUIRE(b == c);
     REQUIRE(a * b == field::GF2E(1));
   }
 }
+
+TEST_CASE("Constant time inverse == custom", "[field]") {
+
+  // Checking for GF2_32
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
+  field::GF2E b;
+  b.set_coeff(31);
+  REQUIRE(b.inverse_const_time() == b.inverse());
+
+  // Checking for GF2_40
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param3));
+  field::GF2E c;
+  c.set_coeff(39);
+  REQUIRE(c.inverse_const_time() == c.inverse());
+
+  // Checking for GF2_48
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param4));
+  field::GF2E d;
+  d.set_coeff(47);
+  REQUIRE(d.inverse_const_time() == d.inverse());
+}
+
 TEST_CASE("NTL interpolation == custom", "[field]") {
   field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
   utils::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
@@ -255,7 +276,7 @@ TEST_CASE("NTL interpolation == custom", "[field]") {
   }
 
   std::vector<std::vector<field::GF2E>> a_lag =
-      field::precompute_lagrange_polynomials(a);
+      field::precompute_lagrange_polynomials_slow(a);
   std::vector<GF2EX> b_lag = utils::precompute_lagrange_polynomials(b);
 
   REQUIRE(a_lag.size() == b_lag.size());
@@ -265,4 +286,57 @@ TEST_CASE("NTL interpolation == custom", "[field]") {
       REQUIRE(a_lag[i][j] == utils::ntl_to_custom(b_lag[i][j]));
     }
   }
+}
+
+TEST_CASE("optmized custom == custom interpolation", "[field]") {
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
+  const size_t ROOT_SIZE = 128;
+
+  std::vector<field::GF2E> x = field::get_first_n_field_elements(ROOT_SIZE);
+  std::vector<field::GF2E> y = field::get_first_n_field_elements(ROOT_SIZE);
+  std::vector<std::vector<field::GF2E>> a_lag =
+      field::precompute_lagrange_polynomials_slow(x);
+  std::vector<field::GF2E> result =
+      field::interpolate_with_precomputation(a_lag, y);
+
+  std::vector<field::GF2E> x_opti =
+      field::get_first_n_field_elements(ROOT_SIZE);
+  std::vector<field::GF2E> y_opti =
+      field::get_first_n_field_elements(ROOT_SIZE);
+  std::vector<std::vector<field::GF2E>> x_lag =
+      field::precompute_lagrange_polynomials(x_opti);
+  std::vector<field::GF2E> result_optim =
+      field::interpolate_with_precomputation(x_lag, y_opti);
+
+  REQUIRE(result == result_optim);
+}
+
+TEST_CASE("fast interpolation == optmized custom interpolation", "[field]") {
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param1));
+  const size_t ROOT_SIZE = 128;
+
+  std::vector<field::GF2E> x_opti =
+      field::get_first_n_field_elements(ROOT_SIZE);
+  std::vector<field::GF2E> y_opti =
+      field::get_first_n_field_elements(ROOT_SIZE);
+  std::vector<std::vector<field::GF2E>> x_lag =
+      field::precompute_lagrange_polynomials(x_opti);
+  std::vector<field::GF2E> result_optim =
+      field::interpolate_with_precomputation(x_lag, y_opti);
+
+  std::vector<field::GF2E> x_fast =
+      field::get_first_n_field_elements(ROOT_SIZE);
+  std::vector<field::GF2E> y_fast =
+      field::get_first_n_field_elements(ROOT_SIZE);
+  std::vector<field::GF2E> precomputed_denominator =
+      field::precompute_denominator(x_fast);
+  std::vector<std::vector<field::GF2E>> precomputed_x_minus_xi;
+  field::set_x_minus_xi_poly_size(precomputed_x_minus_xi, x_fast.size());
+  field::precompute_x_minus_xi_poly_splits(x_fast, precomputed_x_minus_xi);
+
+  std::vector<field::GF2E> result_fast = field::interpolate_with_recurrsion(
+      y_fast, precomputed_denominator, precomputed_x_minus_xi, 0, x_fast.size(),
+      0, precomputed_x_minus_xi.size());
+
+  REQUIRE(result_fast == result_optim);
 }
