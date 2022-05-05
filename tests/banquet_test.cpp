@@ -27,8 +27,6 @@ TEST_CASE("Sign and verify a message", "[banquet]") {
       instance, keypair, (const uint8_t *)message, strlen(message));
   std::vector<uint8_t> serialized_signature =
       banquet_serialize_signature(instance, signature);
-  std::cout << "signature length: " << serialized_signature.size()
-            << " bytes\n";
   REQUIRE(banquet_verify(instance, keypair.second, signature,
                          (const uint8_t *)message, strlen(message)));
 }
@@ -1160,4 +1158,51 @@ TEST_CASE("BANQUET L1_Param1 KAT", "[banquet]") {
       banquet_deserialize_signature(instance, Banquet_L1_Param1_signature);
   REQUIRE(banquet_verify(instance, keypair.second, signature2,
                          (const uint8_t *)message, strlen(message)));
+}
+
+TEST_CASE("Karatsuba Arbitary Degree Fast Polynomial Multiplication == Naive "
+          "Polynomial Multiplication",
+          "[field]") {
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param4));
+
+  // Getting first poly
+  std::vector<field::GF2E> roots = field::get_first_n_field_elements(21);
+  std::vector<field::GF2E> poly1 = field::build_from_roots(roots);
+
+  // Getting a different poly
+  std::vector<field::GF2E> poly2 = field::build_from_roots(roots);
+  for (size_t i = 0; i < poly2.size(); i++) {
+    poly2[i] += field::GF2E(1);
+  }
+
+  std::vector<field::GF2E> naive_mul = poly1 * poly2;
+
+  std::vector<field::GF2E> fast_karat_mul = mul_karatsuba_arbideg(poly1, poly2);
+
+  REQUIRE(naive_mul == fast_karat_mul);
+}
+
+TEST_CASE("Karatsuba Pow 2 - 1 Degree Fast Polynomial Multiplication == Naive "
+          "Polynomial Multiplication",
+          "[field]") {
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param4));
+
+  // Getting first poly
+  std::vector<field::GF2E> roots = field::get_first_n_field_elements(21);
+  std::vector<field::GF2E> poly1 = field::build_from_roots(roots);
+
+  // Getting a different poly
+  std::vector<field::GF2E> poly2 = field::build_from_roots(roots);
+  for (size_t i = 0; i < poly2.size(); i++) {
+    poly2[i] += field::GF2E(1);
+  }
+
+  std::vector<field::GF2E> naive_mul = poly1 * poly2;
+  size_t old_poly1_size = poly1.size();
+  mul_karatsuba_fixdeg_precondition_poly(poly1, poly2);
+  std::vector<field::GF2E> fast_karat_mul =
+      mul_karatsuba_fixdeg(poly1, poly2, 0, poly1.size() - 1);
+  mul_karatsuba_fixdeg_normalize_poly(fast_karat_mul, old_poly1_size);
+
+  REQUIRE(naive_mul == fast_karat_mul);
 }

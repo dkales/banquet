@@ -430,15 +430,140 @@ field::GF2E dot_product(const std::vector<field::GF2E> &lhs,
   if (lhs.size() != rhs.size())
     throw std::runtime_error("adding vectors of different sizes");
 
-  // field::GF2E result;
-  // for (size_t i = 0; i < lhs.size(); i++)
-  // result += lhs[i] * rhs[i];
   __m128i accum = _mm_setzero_si128();
   for (size_t i = 0; i < lhs.size(); i++)
     accum = _mm_xor_si128(accum, clmul(lhs[i].data, rhs[i].data));
 
   field::GF2E result(field::GF2E::reduce(accum));
   return result;
+}
+
+// Multiplies polynomial of arbitarty degree
+std::vector<field::GF2E>
+mul_karatsuba_arbideg(const std::vector<field::GF2E> &lhs,
+                      const std::vector<field::GF2E> &rhs) {
+
+  if (lhs.size() != rhs.size())
+    throw std::runtime_error("karatsuba mul vectors of different sizes");
+
+  field::GF2E d[lhs.size()];
+  std::vector<field::GF2E> c(lhs.size() + rhs.size() - 1);
+
+  // For i == 0
+  d[0] = lhs[0] * rhs[0];
+
+  // For i == 1
+  d[1] = lhs[1] * rhs[1];
+  c[1] = ((lhs[0] + lhs[1]) * (rhs[0] + rhs[1])) - (d[1] + d[0]);
+
+  // For i == 2..poly_length
+  for (size_t i = 2; i < lhs.size(); ++i) {
+    d[i] = lhs[i] * rhs[i];
+    field::GF2E sum;
+    for (size_t t = i; t > i / 2; --t) {
+      sum +=
+          ((lhs[i - t] + lhs[t]) * (rhs[i - t] + rhs[t])) - (d[t] + d[i - t]);
+    }
+    // If i is even
+    sum += d[i / 2] * ((i + 1) % 2);
+    c[i] = sum;
+  }
+
+  // For i == poly_len..poly_len*2-3
+  for (size_t i = lhs.size(); i <= lhs.size() + rhs.size() - 3; ++i) {
+    field::GF2E sum;
+    for (size_t t = lhs.size() - 1; t > i / 2; --t) {
+      sum +=
+          ((lhs[i - t] + lhs[t]) * (rhs[i - t] + rhs[t])) - (d[t] + d[i - t]);
+    }
+    // If i is even
+    sum += d[i / 2] * ((i + 1) % 2);
+    c[i] = sum;
+  }
+
+  // Setting the first and the last i
+  c[0] = d[0];
+  c[lhs.size() + rhs.size() - 2] = d[lhs.size() - 1];
+
+  return c;
+}
+
+// Adding dummy values to make the coeff size a power of 2
+void mul_karatsuba_fixdeg_precondition_poly(std::vector<field::GF2E> &lhs,
+                                            std::vector<field::GF2E> &rhs) {
+
+  // Computes the next power of 2 for a 32 bit number
+  // This represents the no. of coeffs
+  size_t next_2_pow = lhs.size();
+  next_2_pow--;
+  next_2_pow |= next_2_pow >> 1;
+  next_2_pow |= next_2_pow >> 2;
+  next_2_pow |= next_2_pow >> 4;
+  next_2_pow |= next_2_pow >> 8;
+  next_2_pow |= next_2_pow >> 16;
+  next_2_pow++;
+
+  // Putting the dummy terms in the begining to make the polys 2^n - 1 degree ->
+  // 2^n coeff
+  lhs.resize(next_2_pow, field::GF2E(0));
+  rhs.resize(next_2_pow, field::GF2E(0));
+}
+
+// Adding dummy values to make the coeff size a power of 2
+void mul_karatsuba_fixdeg_normalize_poly(std::vector<field::GF2E> &poly,
+                                         size_t old_size) {
+  poly.resize((old_size << 1) - 1);
+}
+
+// Multiplies polynomial of 2^n - 1 degree -> 2^n coeff
+std::vector<field::GF2E>
+mul_karatsuba_fixdeg(const std::vector<field::GF2E> &lhs,
+                     const std::vector<field::GF2E> &rhs,
+                     const size_t start_idx, const size_t end_idx) {
+
+  size_t full_size = ((end_idx - start_idx) + 1);
+  size_t half_size = full_size / 2;
+
+  // If a polynomial with degree 0 -> const
+  if (full_size == 1) {
+    return std::vector<field::GF2E>(1, lhs[start_idx] * rhs[start_idx]);
+  }
+
+  std::vector<field::GF2E> d_0 =
+      mul_karatsuba_fixdeg(lhs, rhs, start_idx, (start_idx + half_size) - 1);
+  std::vector<field::GF2E> d_1 =
+      mul_karatsuba_fixdeg(lhs, rhs, (start_idx + half_size), end_idx);
+
+  std::vector<field::GF2E> lhs_l_add_u, rhs_l_add_u;
+  lhs_l_add_u.reserve(half_size);
+  rhs_l_add_u.reserve(half_size);
+  // Getting the lower of lhs and rhs
+  for (size_t i = start_idx; i < start_idx + half_size; ++i) {
+    lhs_l_add_u.push_back(lhs[i] + lhs[half_size + i]);
+    rhs_l_add_u.push_back(rhs[i] + rhs[half_size + i]);
+  }
+  std::vector<field::GF2E> d_01 =
+      mul_karatsuba_fixdeg(lhs_l_add_u, rhs_l_add_u, 0, half_size - 1);
+
+  std::vector<field::GF2E> c(d_1.size() + full_size);
+  // D_1*x^n + (D_01 - D_0 - D_1)*x^(n/2) + d_0
+  size_t cidx = c.size();
+  for (size_t i = d_1.size(); i; --i) {
+    c[cidx - 1] += d_1[i - 1];
+    cidx--;
+  }
+  cidx = c.size() * 3 / 4;
+  for (size_t i = d_0.size(); i; --i) {
+    c[cidx - 1] += (d_01[i - 1] - d_0[i - 1] - d_1[i - 1]);
+    cidx--;
+  }
+  cidx = (c.size() / 2);
+  for (size_t i = d_0.size(); i; --i) {
+    c[cidx - 1] += d_0[i - 1];
+    cidx--;
+  }
+
+  return c;
 }
 
 std::vector<field::GF2E> operator*(const std::vector<field::GF2E> &lhs,

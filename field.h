@@ -16,6 +16,21 @@ class GF2E;
 field::GF2E dot_product(const std::vector<field::GF2E> &lhs,
                         const std::vector<field::GF2E> &rhs);
 
+std::vector<field::GF2E>
+mul_karatsuba_arbideg(const std::vector<field::GF2E> &lhs,
+                      const std::vector<field::GF2E> &rhs);
+
+void mul_karatsuba_fixdeg_precondition_poly(std::vector<field::GF2E> &lhs,
+                                            std::vector<field::GF2E> &rhs);
+
+void mul_karatsuba_fixdeg_normalize_poly(std::vector<field::GF2E> &poly,
+                                         size_t old_size);
+
+std::vector<field::GF2E>
+mul_karatsuba_fixdeg(const std::vector<field::GF2E> &lhs,
+                     const std::vector<field::GF2E> &rhs, const size_t start,
+                     const size_t end);
+
 namespace field {
 class GF2E {
 
