@@ -27,8 +27,6 @@ TEST_CASE("Sign and verify a message", "[banquet]") {
       instance, keypair, (const uint8_t *)message, strlen(message));
   std::vector<uint8_t> serialized_signature =
       banquet_serialize_signature(instance, signature);
-  std::cout << "signature length: " << serialized_signature.size()
-            << " bytes\n";
   REQUIRE(banquet_verify(instance, keypair.second, signature,
                          (const uint8_t *)message, strlen(message)));
 }

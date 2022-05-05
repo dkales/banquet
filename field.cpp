@@ -872,9 +872,6 @@ field::GF2E dot_product(const std::vector<field::GF2E> &lhs,
   if (lhs.size() != rhs.size())
     throw std::runtime_error("mul vectors of different sizes");
 
-  // field::GF2E result;
-  // for (size_t i = 0; i < lhs.size(); i++)
-  // result += lhs[i] * rhs[i];
   __m128i accum = _mm_setzero_si128();
   for (size_t i = 0; i < lhs.size(); i++) {
     accum = _mm_xor_si128(accum, clmul(lhs[i].data, rhs[i].data));
@@ -895,14 +892,14 @@ mul_karatsuba_arbideg(const std::vector<field::GF2E> &lhs,
   field::GF2E d[lhs.size()];
   std::vector<field::GF2E> c(lhs.size() + rhs.size() - 1);
 
-  // When i == 0
+  // For i == 0
   d[0] = lhs[0] * rhs[0];
 
-  // When i == 1
+  // For i == 1
   d[1] = lhs[1] * rhs[1];
   c[1] = ((lhs[0] + lhs[1]) * (rhs[0] + rhs[1])) - (d[1] + d[0]);
 
-  // When i == 2..poly_length
+  // For i == 2..poly_length
   for (size_t i = 2; i < lhs.size(); ++i) {
     d[i] = lhs[i] * rhs[i];
     field::GF2E sum;
@@ -915,14 +912,13 @@ mul_karatsuba_arbideg(const std::vector<field::GF2E> &lhs,
     c[i] = sum;
   }
 
-  // When i == poly_len..poly_len*2-3
+  // For i == poly_len..poly_len*2-3
   for (size_t i = lhs.size(); i <= lhs.size() + rhs.size() - 3; ++i) {
     field::GF2E sum;
     for (size_t t = lhs.size() - 1; t > i / 2; --t) {
       sum +=
           ((lhs[i - t] + lhs[t]) * (rhs[i - t] + rhs[t])) - (d[t] + d[i - t]);
     }
-
     // If i is even
     sum += d[i / 2] * ((i + 1) % 2);
     c[i] = sum;
