@@ -481,13 +481,15 @@ banquet_signature_t banquet_sign(const banquet_instance_t &instance,
   // a vector of the first m2+1 field elements for interpolation
   std::vector<field::GF2E> x_values_for_interpolation_zero_to_m2 =
       field::get_first_n_field_elements(instance.m2 + 1);
-  std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_m2 =
-      field::precompute_lagrange_polynomials(
-          x_values_for_interpolation_zero_to_m2);
+  // a vector of the first 2 * m2+1 field elements for interpolation
   std::vector<field::GF2E> x_values_for_interpolation_zero_to_2m2 =
       field::get_first_n_field_elements(2 * instance.m2 + 1);
+
+  std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_m2 =
+      field::precompute_lagrange_polynomials_slow(
+          x_values_for_interpolation_zero_to_m2);
   std::vector<std::vector<field::GF2E>> precomputation_for_zero_to_2m2 =
-      field::precompute_lagrange_polynomials(
+      field::precompute_lagrange_polynomials_slow(
           x_values_for_interpolation_zero_to_2m2);
 
   std::vector<std::vector<std::vector<std::vector<field::GF2E>>>> s_prime(
