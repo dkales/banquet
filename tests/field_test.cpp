@@ -387,3 +387,22 @@ TEST_CASE("Karatsuba Pow 2 - 1 Degree Fast Polynomial Multiplication == Naive "
 
   REQUIRE(naive_mul == fast_karat_mul);
 }
+
+TEST_CASE("Fast poly eval == poly eval", "[field]") {
+
+  field::GF2E::init_extension_field(banquet_instance_get(Banquet_L1_Param4));
+  // field::GF2E a;
+  std::vector<field::GF2E> a(1);
+  a[0].set_coeff(31);
+  a[0].set_coeff(39);
+
+  std::vector<field::GF2E> roots = field::get_first_n_field_elements(3);
+  std::vector<field::GF2E> poly = field::build_from_roots(roots);
+  field::GF2E eval = field::eval(poly, a[0]);
+
+  std::vector<field::GF2E> precomp = field::eval_precompute(a[0], poly.size());
+  field::GF2E eval1 = field::eval_fast(
+      poly, precomp, banquet_instance_get(Banquet_L1_Param4).lambda);
+
+  REQUIRE(eval == eval1);
+}
